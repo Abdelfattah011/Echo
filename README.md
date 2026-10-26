@@ -163,6 +163,12 @@ Every run of ECHO is saved. dbt turns the raw logs into clean tables, and then i
 
 ---
 
+## Bronze Schema
+
+<p align="center">
+  <img src="bronze.schema.png" alt="Star Schema" width="100%">
+</p>
+
 ## Supported Bug Types
 
 | Bug type | What happens |

@@ -1,2 +1,21 @@
-sqlglot
-duckdb
+# --- SQL Parsing & Engine ---
+sqlglot>=23.0.0
+
+# --- Database & Drivers ---
+duckdb>=0.10.0
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.0
+
+# --- Data Handling & Validation ---
+pandas>=2.0.0
+pydantic>=2.0.0
+
+# --- API Layer (FastAPI) ---
+fastapi>=0.110.0
+uvicorn>=0.28.0
+
+# --- Dashboard & UI ---
+streamlit>=1.32.0
+
+# --- Environment & Utilities ---
+python-dotenv>=1.0.0

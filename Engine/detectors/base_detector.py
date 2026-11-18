@@ -9,6 +9,7 @@ class BaseBugDetector(ABC):
   """
 
   @abstractmethod
+<<<<<<< HEAD
   def detect(self, parsed_steps: list, execution_results: list, db_connection=None, *args, **kwargs) -> dict | None:
     """Analyzes query steps and execution data to find anomalies.
 
@@ -16,3 +17,11 @@ class BaseBugDetector(ABC):
     Uses db_connection, *args, and **kwargs for full flexibility and crash-prevention.
     """
     pass
+=======
+  def detect(self, parsed_steps: list, execution_results: list) -> dict:
+    """Analyzes query steps and execution data to find anomalies.
+
+    Returns a bug report if detected, or None.
+    """
+    pass
+>>>>>>> 11cfc2f119062be38a47a4b5278be27c2172ba14

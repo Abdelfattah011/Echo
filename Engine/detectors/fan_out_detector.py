@@ -1,82 +1,55 @@
-<<<<<<< HEAD
 from Engine.detectors.base_detector import BaseBugDetector
+from typing import List, Dict, Any, Optional
 
 
 class FanOutDetector(BaseBugDetector):
-    """Production-grade detector for identifying JOIN Fan-out anomalies
-
-    by analyzing step-by-step execution row counts and tracing structural inflation.
+    """Bulletproof JOIN Fan-out Detector.
+    
+    Ignores strict step types and strictly monitors raw sequential row inflation 
+    across any step trace to instantly catch data explosions.
     """
 
-    def detect(self, parsed_steps, execution_results, db_connection=None, *args, **kwargs):
-        """Analyzes execution trace results step-by-step to detect
-
-        unexpected row count expansions caused by flawed JOIN operations.
-        """
-        if not isinstance(execution_results, list) or not execution_results:
+    def detect(
+        self, 
+        parsed_steps: List[Dict[str, Any]], 
+        step_trace: List[Dict[str, Any]], 
+        db_connection: Any = None, 
+        *args, 
+        **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        """Strictly compares sequential row counts to catch fan-out unconditionally."""
+        if not isinstance(step_trace, list) or len(step_trace) < 2:
             return None
 
-        previous_rows = None
-        suspicious_step_id = None
-        inflation_ratio = 1.0
+        for i in range(len(step_trace) - 1):
+            curr_step = step_trace[i]
+            next_step = step_trace[i + 1]
 
-        for result in execution_results:
-            if not isinstance(result, dict):
+            curr_rows = curr_step.get("row_count")
+            next_rows = next_step.get("row_count")
+            next_id = next_step.get("step_id", f"step_{i+2}")
+
+            if not isinstance(curr_rows, (int, float)) or not isinstance(next_rows, (int, float)):
                 continue
 
-            step_type = str(result.get("step_type", "")).upper()
-            step_id = result.get("step_id", "unknown_step")
-            rows = result.get("row_count")
-
-            if not isinstance(rows, (int, float)):
+            if curr_rows <= 0:
                 continue
 
-            if step_type in {"BASE_TABLE", "TABLE"} or previous_rows is None:
-                previous_rows = rows
-                continue
-
-            if previous_rows is not None and rows > previous_rows:
-                ratio = rows / previous_rows if previous_rows > 0 else 0
-
-                if ratio > 1.0:
-                    inflation_ratio = ratio
-                    suspicious_step_id = step_id
+            if next_rows > curr_rows:
+                inflation_ratio = round(next_rows / curr_rows, 2)
+                
+                if inflation_ratio > 1.05:
+                    severity = "High" if inflation_ratio >= 1.5 else "Medium"
                     
-                    return {
-                        "bug_type": "Possible JOIN Fan-out",
-                        "severity": "High" if inflation_ratio >= 2.0 else "Medium",
-                        "suspicious_step_id": suspicious_step_id,
-                        "description": (
-                            f"Row count exploded from {previous_rows} "
-                            f"to {rows} at step '{suspicious_step_id}' after a JOIN "
-                            f"(x{inflation_ratio:.2f} increase). This indicates potential "
-                            "unintended row duplication due to one-to-many "
-                            "or duplicate keys in the joined table."
+                    return self._format_bug_report(
+                        bug_type="Possible JOIN Fan-out",
+                        severity=severity,
+                        description=(
+                            f"Critical row inflation detected at '{next_id}'. "
+                            f"Row count surged from {curr_rows:,} to {next_rows:,} "
+                            f"(x{inflation_ratio} multiplier increase). This strongly indicates an unintended "
+                            f"one-to-many data duplication or a missing/flawed ON condition in the JOIN operation."
                         ),
-                    }
-
-            previous_rows = rows
+                    )
 
         return None
-=======
-from Engine.base_detector import BaseBugDetector
-
-
-class FanOutDetector(BaseBugDetector):
-  """Detects JOIN Fan-out anomalies where row counts unexpectedly multiply
-
-  due to One-to-Many table relationships without proper aggregation or keys.
-  """
-
-  def detect(self, parsed_steps: list, execution_results: list) -> dict:
-
-    bug_report = {
-        "bug_type": "JOIN Fan-out",
-        "severity": "High",
-        "description": (
-            "Detected unexpected row multiplication during table join."
-        ),
-    }
-
-    return bug_report
->>>>>>> 11cfc2f119062be38a47a4b5278be27c2172ba14

@@ -1,14 +1,45 @@
-from Engine.detectors.base_detector import BaseBugDetector
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+from Engine.detectors.base_detector import SEVERITY_RANK, BaseBugDetector
 
 
 class GeneralAnomalyDetector(BaseBugDetector):
     """Silent & Enterprise-Grade General Anomaly Detector.
-    
+
     Acts as a smart guard:
     - Catches performance bottlenecks, data drops, and complex join workflows.
     - Returns None quietly when the query is clean and error-free to prevent noise.
+
+    Checks (all configurable through the class constants below, or per call via kwargs):
+      1. Performance Bottleneck / Heavy Step Warning   (slowest step above the threshold)
+      2. Silent Data Drop / Empty Result Set            (rows -> 0 inside one pipeline)
+      3. Severe Row Loss at JOIN                        (new: >= 95% of rows lost at a JOIN)
+      4. Empty Source Table                             (new: a base table with 0 rows)
+      5. Complex Aggregation & Join Workflow            (Low; only when nothing else is wrong)
+
+    Noise control
+    -------------
+    * Row counts are compared only inside one scope of a SELECT pipeline. DML (UPDATE / DELETE
+      touching 0 rows), DDL (TRUNCATE ...), admin commands, CTE / UNION results and statement
+      boundaries are never treated as "data drops".
+    * Row INFLATION belongs to FanOutDetector: check 5 stays silent when a JOIN inflated rows,
+      so the two detectors never raise conflicting alerts for the same problem.
+    * One report is returned (the most severe, earliest). Every other finding is attached to
+      it as ``evidence["additional_findings"]`` instead of being lost.
     """
+
+    PERFORMANCE_THRESHOLD_MS = 3000
+    SEVERE_LOSS_MIN_ROWS = 100       # ignore tiny samples
+    SEVERE_LOSS_RATIO = 0.05         # rows_after / rows_before at or below this = severe loss
+    REPORT_SEVERE_ROW_LOSS = True
+    REPORT_EMPTY_SOURCE = True
+    REPORT_COMPLEX_WORKFLOW = True
+    MIN_INFLATION_RATIO = 1.05       # keep equal to FanOutDetector.MIN_INFLATION_RATIO
+    MAX_ADDITIONAL = 10
+
+    # Legacy names kept for compatibility (classification now lives in the base class).
+    ignored_types = {"DDL", "TRUNCATE", "DROP", "CREATE", "ALTER"}
+    ignored_kinds = {"TRUNCATE", "TRUNCATE_TABLE", "DROP_TABLE", "DROP_VIEW", "CREATE_TABLE", "ALTER_TABLE"}
 
     def detect(
         self,
@@ -22,64 +53,182 @@ class GeneralAnomalyDetector(BaseBugDetector):
         if not isinstance(step_trace, list) or not step_trace:
             return None
 
-        for step in step_trace:
-            exec_time = step.get("execution_time_ms", 0)
-            if isinstance(exec_time, (int, float)) and exec_time > 3000:
-                return self._format_bug_report(
-                    bug_type="Performance Bottleneck / Heavy Step Warning",
-                    severity="Medium",
-                    description=(
-                        f"Performance lag detected at step '{step.get('step_id', 'unknown')}'. "
-                        f"Execution took {exec_time}ms. Consider optimizing table scans or adding indexes."
-                    ),
-                )
+        threshold = self.to_number(kwargs.get("performance_threshold_ms"))
+        threshold = self.PERFORMANCE_THRESHOLD_MS if threshold is None else threshold
 
-        ignored_types = {"DDL", "TRUNCATE", "DROP", "CREATE", "ALTER"}
-        ignored_kinds = {
-            "TRUNCATE",
-            "TRUNCATE_TABLE",
-            "DROP_TABLE",
-            "DROP_VIEW",
-            "CREATE_TABLE",
-            "ALTER_TABLE",
-        }
+        flow = self.collect_row_flow(parsed_steps, step_trace)
+        findings: List[Dict[str, Any]] = []
+        findings += self._check_performance(step_trace, threshold)
+        findings += self._check_data_drop(flow)
+        if self.REPORT_SEVERE_ROW_LOSS:
+            findings += self._check_severe_join_loss(flow)
+        if self.REPORT_EMPTY_SOURCE:
+            findings += self._check_empty_source(flow)
 
-        for i in range(1, len(step_trace)):
-            curr_step = step_trace[i]
-            prev_step = step_trace[i - 1]
+        # The workflow note is informational: only when nothing else is wrong and FanOutDetector
+        # has nothing to say about row inflation.
+        if not findings and self.REPORT_COMPLEX_WORKFLOW \
+                and not self.find_join_inflations(flow, self.MIN_INFLATION_RATIO):
+            findings += self._check_complex_workflow(parsed_steps, step_trace)
 
-            step_type = str(curr_step.get("step_type") or "").upper()
-            stmt_kind = str(curr_step.get("statement_kind") or "").upper()
-            if step_type in ignored_types or stmt_kind in ignored_kinds:
+        if not findings:
+            return None
+
+        findings.sort(key=lambda f: (SEVERITY_RANK.get(f["severity"], 9), f["_index"]))
+        primary, others = findings[0], findings[1:]
+        extras = [
+            {"bug_type": f["bug_type"], "severity": f["severity"],
+             "suspicious_step_id": f["suspicious_step_id"], "description": f["description"]}
+            for f in others[: self.MAX_ADDITIONAL]
+        ]
+        for finding in findings:
+            finding.pop("_index", None)
+        if extras:
+            primary["evidence"]["additional_findings"] = extras
+        return primary
+
+    # ------------------------------------------------------------------ #
+    def _finding(self, index, **fields) -> Dict[str, Any]:
+        report = self.report(**fields)
+        report["_index"] = index
+        return report
+
+    # 1) Performance ---------------------------------------------------- #
+    def _check_performance(self, step_trace, threshold) -> List[Dict[str, Any]]:
+        slow = []
+        for index, step in enumerate(step_trace):
+            if not isinstance(step, dict) or str(step.get("status") or "").lower() == "skipped":
                 continue
+            elapsed = self.to_number(step.get("execution_time_ms"))
+            if elapsed is not None and elapsed > threshold:
+                slow.append((elapsed, index, step))
+        if not slow:
+            return []
+        elapsed, index, step = max(slow, key=lambda item: item[0])
+        step_id = step.get("step_id", "unknown")
+        return [self._finding(
+            index,
+            bug_type="Performance Bottleneck / Heavy Step Warning",
+            severity="Medium",
+            description=(
+                f"Performance lag detected at step '{step_id}'. "
+                f"Execution took {elapsed}ms. Consider optimizing table scans or adding indexes."
+            ),
+            suspicious_step_id=step_id,
+            scope=step.get("scope"),
+            evidence={"execution_time_ms": elapsed, "threshold_ms": threshold, "slow_step_count": len(slow)},
+            suggested_fix="Filter early, select only needed columns, and index or pre-aggregate the large join keys.",
+        )]
 
-            curr_rows = curr_step.get("row_count")
-            prev_rows = prev_step.get("row_count")
+    # 2) Silent data drop ----------------------------------------------- #
+    def _check_data_drop(self, flow) -> List[Dict[str, Any]]:
+        findings = []
+        for item in flow:
+            if item["category"] == "BASE" or not item["prev_rows"] or item["rows"] != 0:
+                continue
+            step_id = item["step_id"]
+            findings.append(self._finding(
+                item["index"],
+                bug_type="Silent Data Drop / Empty Result Set",
+                severity="High",
+                description=(
+                    f"Data flow dropped to 0 rows at step '{step_id}' "
+                    f"(Type: {item['step_type'] or 'UNKNOWN'}). "
+                    f"Check for overly restrictive filters or mismatched join conditions."
+                ),
+                suspicious_step_id=step_id,
+                scope=item["scope"],
+                evidence={"rows_before": item["prev_rows"], "rows_after": 0,
+                          "previous_step": item["prev_step_id"], "category": item["category"]},
+                suggested_fix="Inspect sample key values on both sides of the join and the filter constants.",
+            ))
+        return findings
 
-            if isinstance(curr_rows, (int, float)) and isinstance(prev_rows, (int, float)):
-                if prev_rows > 0 and curr_rows == 0:
-                    return self._format_bug_report(
-                        bug_type="Silent Data Drop / Empty Result Set",
-                        severity="High",
-                        description=(
-                            f"Data flow dropped to 0 rows at step '{curr_step.get('step_id', 'unknown')}' "
-                            f"(Type: {curr_step.get('step_type', 'UNKNOWN')}). "
-                            f"Check for overly restrictive filters or mismatched join conditions."
-                        ),
-                    )
+    # 3) Severe row loss at a JOIN (new) -------------------------------- #
+    def _check_severe_join_loss(self, flow) -> List[Dict[str, Any]]:
+        findings = []
+        for item in flow:
+            before, after = item["prev_rows"], item["rows"]
+            if item["category"] != "JOIN" or not before or before < self.SEVERE_LOSS_MIN_ROWS:
+                continue
+            if after == 0 or after > before * self.SEVERE_LOSS_RATIO:  # 0 rows is the data-drop check
+                continue
+            lost = 100.0 * (1 - after / before)
+            findings.append(self._finding(
+                item["index"],
+                bug_type="Severe Row Loss at JOIN",
+                severity="Medium",
+                description=(
+                    f"Step '{item['step_id']}' kept only {after:,} of {before:,} rows ({lost:.1f}% lost). "
+                    f"Almost no key values found a partner: check key formats, types, case and whitespace."
+                ),
+                suspicious_step_id=item["step_id"],
+                scope=item["scope"],
+                evidence={"rows_before": before, "rows_after": after, "rows_lost_pct": round(lost, 1)},
+                suggested_fix="Compare sample key values from both tables; normalise types, trimming and case.",
+                confidence="medium",
+            ))
+        return findings
 
-        has_join = any(step.get("step_type") == "JOIN" for step in step_trace)
-        has_group_by = any(step.get("step_type") == "GROUP_BY" for step in step_trace)
-
-        if has_join and has_group_by:
-            return self._format_bug_report(
-                bug_type="Complex Aggregation & Join Workflow",
+    # 4) Empty source table (new) --------------------------------------- #
+    def _check_empty_source(self, flow) -> List[Dict[str, Any]]:
+        findings = []
+        for item in flow:
+            if item["category"] != "BASE" or item["rows"] != 0:
+                continue
+            step = item["step"]
+            name = step.get("name") or step.get("step_id")
+            findings.append(self._finding(
+                item["index"],
+                bug_type="Empty Source Table",
                 severity="Low",
                 description=(
-                    "The query combines table JOIN operations with GROUP BY aggregations. "
-                    "Ensure that grain alignment and aggregation keys are correctly structured "
-                    "to prevent calculation distortion."
+                    f"The source relation '{name}' returned 0 rows at step '{item['step_id']}', "
+                    f"so every later step is trivially empty. Check that the table/sample was loaded."
                 ),
-            )
+                suspicious_step_id=item["step_id"],
+                scope=item["scope"],
+                evidence={"rows": 0},
+                suggested_fix="Load data into the table (or use a representative sample) before analysing.",
+                confidence="medium",
+            ))
+        return findings
 
-        return None
+    # 5) Complex aggregation & join workflow ---------------------------- #
+    def _check_complex_workflow(self, parsed_steps, step_trace) -> List[Dict[str, Any]]:
+        """JOIN + GROUP BY / AGGREGATE inside the SAME scope (original check, scope-aware)."""
+        parsed_list = self.as_dict_list(parsed_steps)
+        parsed_by_id = {p.get("step_id"): p for p in parsed_list if p.get("step_id") is not None}
+        scopes: Dict[str, Dict[str, Any]] = {}
+        for index, entry in enumerate(step_trace):
+            if not isinstance(entry, dict) or not self.is_step_ok(entry):
+                continue
+            parsed = parsed_by_id.get(entry.get("step_id"))
+            if parsed is None and len(parsed_list) == len(step_trace):
+                parsed = parsed_list[index]
+            step = self._merge(entry, parsed)
+            category = self.classify_step(step)
+            scope = str(step.get("scope") or "main")
+            info = scopes.setdefault(scope, {"join": None, "group": None})
+            if category == "JOIN" and info["join"] is None:
+                info["join"] = (index, entry.get("step_id"))
+            elif category == "AGGREGATE" and info["group"] is None:
+                info["group"] = (index, entry.get("step_id"))
+        for scope, info in scopes.items():
+            if info["join"] and info["group"]:
+                return [self._finding(
+                    info["group"][0],
+                    bug_type="Complex Aggregation & Join Workflow",
+                    severity="Low",
+                    description=(
+                        "The query combines table JOIN operations with GROUP BY aggregations. "
+                        "Ensure that grain alignment and aggregation keys are correctly structured "
+                        "to prevent calculation distortion."
+                    ),
+                    suspicious_step_id=info["group"][1],
+                    scope=scope,
+                    evidence={"join_step": info["join"][1], "aggregate_step": info["group"][1]},
+                    suggested_fix="Confirm each joined table is unique at the grain you aggregate on.",
+                    confidence="low",
+                )]
+        return []

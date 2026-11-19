@@ -11,12 +11,12 @@ class GeneralAnomalyDetector(BaseBugDetector):
     """
 
     def detect(
-        self, 
-        parsed_steps: List[Dict[str, Any]], 
-        step_trace: List[Dict[str, Any]], 
-        db_connection: Any = None, 
-        *args, 
-        **kwargs
+        self,
+        parsed_steps: List[Dict[str, Any]],
+        step_trace: List[Dict[str, Any]],
+        db_connection: Any = None,
+        *args,
+        **kwargs,
     ) -> Optional[Dict[str, Any]]:
         """Scans for general anomalies, returns None if everything is clean."""
         if not isinstance(step_trace, list) or not step_trace:
@@ -34,9 +34,25 @@ class GeneralAnomalyDetector(BaseBugDetector):
                     ),
                 )
 
+        ignored_types = {"DDL", "TRUNCATE", "DROP", "CREATE", "ALTER"}
+        ignored_kinds = {
+            "TRUNCATE",
+            "TRUNCATE_TABLE",
+            "DROP_TABLE",
+            "DROP_VIEW",
+            "CREATE_TABLE",
+            "ALTER_TABLE",
+        }
+
         for i in range(1, len(step_trace)):
             curr_step = step_trace[i]
             prev_step = step_trace[i - 1]
+
+            step_type = str(curr_step.get("step_type") or "").upper()
+            stmt_kind = str(curr_step.get("statement_kind") or "").upper()
+            if step_type in ignored_types or stmt_kind in ignored_kinds:
+                continue
+
             curr_rows = curr_step.get("row_count")
             prev_rows = prev_step.get("row_count")
 

@@ -5,9 +5,47 @@ from typing import List, Dict, Any, Optional
 class FanOutDetector(BaseBugDetector):
     """Bulletproof JOIN Fan-out Detector.
     
-    Ignores strict step types and strictly monitors raw sequential row inflation 
-    across any step trace to instantly catch data explosions.
+    Monitors sequential row inflation on JOIN steps to catch data explosions
+    without triggering false JOIN fan-out alerts on non-JOIN steps.
     """
+
+    def _is_join_step(
+        self,
+        step: Dict[str, Any],
+        parsed_steps: List[Dict[str, Any]],
+        step_index: int,
+    ) -> bool:
+        step_type = str(step.get("step_type") or "").upper()
+        stmt_kind = str(step.get("statement_kind") or "").upper()
+        operation = str(step.get("operation") or "").upper()
+        sql_text = str(step.get("sql") or step.get("query") or "").upper()
+
+        if (
+            step_type == "JOIN"
+            or "JOIN" in stmt_kind
+            or "JOIN" in operation
+            or " JOIN " in f" {sql_text} "
+        ):
+            return True
+
+        step_id = step.get("step_id")
+        if isinstance(parsed_steps, list):
+            for p_step in parsed_steps:
+                if isinstance(p_step, dict):
+                    if step_id and p_step.get("step_id") == step_id:
+                        p_type = str(p_step.get("step_type") or p_step.get("type") or "").upper()
+                        p_sql = str(p_step.get("sql") or p_step.get("query") or "").upper()
+                        if "JOIN" in p_type or " JOIN " in f" {p_sql} ":
+                            return True
+
+            if 0 <= step_index < len(parsed_steps) and isinstance(parsed_steps[step_index], dict):
+                p_step = parsed_steps[step_index]
+                p_type = str(p_step.get("step_type") or p_step.get("type") or "").upper()
+                p_sql = str(p_step.get("sql") or p_step.get("query") or "").upper()
+                if "JOIN" in p_type or " JOIN " in f" {p_sql} ":
+                    return True
+
+        return False
 
     def detect(
         self, 
@@ -17,7 +55,7 @@ class FanOutDetector(BaseBugDetector):
         *args, 
         **kwargs
     ) -> Optional[Dict[str, Any]]:
-        """Strictly compares sequential row counts to catch fan-out unconditionally."""
+        """Strictly compares sequential row counts to catch fan-out on JOIN steps."""
         if not isinstance(step_trace, list) or len(step_trace) < 2:
             return None
 
@@ -36,6 +74,9 @@ class FanOutDetector(BaseBugDetector):
                 continue
 
             if next_rows > curr_rows:
+                if not self._is_join_step(next_step, parsed_steps, i + 1):
+                    continue
+
                 inflation_ratio = round(next_rows / curr_rows, 2)
                 
                 if inflation_ratio > 1.05:

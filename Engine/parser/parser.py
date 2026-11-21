@@ -909,6 +909,21 @@ class _StepBuilder:
                     ),
                 },
             )
+        else:
+            # Plain SELECT: the flow steps use SELECT *, so run the full query once. This binds the
+            # SELECT list / ORDER BY and surfaces unknown columns instead of passing silently.
+            full = self._sql(_without_with(select))
+            self._add(
+                step_type="PROJECTION",
+                name="projection",
+                scope=scope,
+                description="Evaluate the SELECT list and ORDER BY",
+                sql_snippet=full,
+                executable_query=f"{prefix}{full}",
+                count_query=_wrap_count(prefix, full),
+                with_prefix=prefix,
+                alias_map=dict(alias_map),
+            )
 
     # ---- builders --------------------------------------------------------- #
     def _flow_step(self, step_type, name, description, snippet, scope, prefix, from_sql,

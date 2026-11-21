@@ -319,7 +319,29 @@ def normalize_fix(payload: Any, sql: str) -> Dict[str, Any]:
             "checks": as_dict(ver.get("checks")),
         },
         "input_notes": [strip_ansi(n) for n in as_list(data.get("input_notes"))],
+        # --- optional proposal fields (absent in older API versions -> safe defaults) ---
+        "status": str(data.get("status") or ("applied" if data.get("applied") else "none")),
+        "proposed_sql": strip_ansi(data.get("proposed_sql")) if data.get("proposed_sql") else "",
+        "proposals": [p for p in as_list(data.get("proposals")) if isinstance(p, dict)],
+        "proposal_verification": as_dict(data.get("proposal_verification")),
     }
+
+
+FIX_STATUS_LABELS = {
+    "verified": ("VERIFIED FIX", "t-ok"),
+    "applied_unverified": ("APPLIED • NOT VERIFIED", "t-warn"),
+    "applied": ("APPLIED FIX", "t-ok"),
+    "suggested": ("SUGGESTED FIX • REVIEW GRAIN / LOGIC", "t-warn"),
+    "manual": ("MANUAL ACTION REQUIRED", "t-bad"),
+}
+
+
+def build_proposal_sql(proposed_sql: str, status: str, notes: List[str]) -> str:
+    """The engine's proposed script under ECHO comment lines (stripped again on the next run)."""
+    label = FIX_STATUS_LABELS.get(status, ("PROPOSAL", ""))[0]
+    header = f"-- ECHO {label}: not applied automatically, review it before using it.\n"
+    header += "".join(f"-- ECHO note: {_one_line(n)}\n" for n in notes[:4])
+    return header + strip_echo_headers(proposed_sql)
 # --- END FIXER & PROOF CODE / ADAPTER ---
 
 
@@ -1047,7 +1069,8 @@ else:
                 stage("Parse", "syntax error" if syntax else "ok", "bad" if syntax else "ok"),
                 stage("Run", "failed" if failed else "ok", "bad" if failed else "ok"),
                 stage("Detect", f"{len(bugs)} finding(s)" if bugs else "clean", "warn" if bugs else "ok"),
-                stage("Fix", "applied" if fixed_ok else "none", "ok" if fixed_ok else "idle"),
+                stage("Fix", "applied" if fixed_ok else (fix.get("status") if fix.get("status") in ("suggested", "manual") else "none"),
+                      "ok" if fixed_ok else ("warn" if fix.get("status") in ("suggested", "manual") else "idle")),
                 stage("Verify", verdict[0].lower(), verdict[2] if passed is not None else "idle"),
             )
         )
@@ -1085,7 +1108,12 @@ else:
     if bug_detail and (not engine_reason or str(engine_reason).startswith("No automatic rewrite exists")):
         engine_reason = bug_detail
     advisory_sql = ""
-    if not fixed_ok and bugs:
+    proposals = [p for p in as_list(fix.get("proposals")) if isinstance(p, dict)]
+    fix_status = str(fix.get("status") or "none")
+    proposal_notes = [n for p in proposals for n in as_list(p.get("notes"))]
+    if not fixed_ok and fix.get("proposed_sql"):
+        advisory_sql = build_proposal_sql(fix["proposed_sql"], fix_status, [strip_ansi(n) for n in proposal_notes])
+    elif not fixed_ok and bugs:
         try:
             advisory_sql = build_advisory_sql(
                 original_sql, bug_name, suggested_fix, traces,
@@ -1108,15 +1136,38 @@ else:
                 suggested_fix
                 or "Ensure each joined table is unique at the join/aggregation grain before summing measures."
             )
+            badge_text, badge_class = FIX_STATUS_LABELS.get(fix_status, ("FIX &amp; TELEMETRY PROOF", "t-warn"))
             st.markdown(
-                f"<div class='panel t-warn'><span class='badge'>FIX &amp; TELEMETRY PROOF</span>"
+                f"<div class='panel {badge_class}'><span class='badge'>{badge_text}</span>"
                 f"<div style='font-weight:700;margin:12px 0 6px'>Issue: {esc(bug_name, 'Anomaly')}</div>"
                 f"<p class='dim' style='margin:0;font-size:13px;line-height:1.7'>{esc(rec_text)}</p>"
                 f"<div class='dim' style='margin-top:10px;font-size:12px'>Engine note: {esc(reason, 'Advisory fix provided.')}</div></div>",
                 unsafe_allow_html=True,
             )
 
-            t_adv, t_cmp = st.tabs(["Recommended SQL Fix", "Telemetry Proof"])
+            tab_names = ["Recommended SQL Fix", "Telemetry Proof"] + (["Review notes & diagnostics"] if proposals else [])
+            tabs = st.tabs(tab_names)
+            t_adv, t_cmp = tabs[0], tabs[1]
+            if proposals:
+                with tabs[2]:
+                    for proposal in proposals:
+                        label = FIX_STATUS_LABELS.get(str(proposal.get("status")), ("PROPOSAL", ""))[0]
+                        st.markdown(f"**{esc(proposal.get('bug_type'), 'Finding')}** — {label}")
+                        for note in as_list(proposal.get("notes")):
+                            st.markdown("- " + esc(strip_ansi(note)))
+                        if proposal.get("diagnostic_sql"):
+                            st.caption("Diagnostic query (read-only; run it to see the problem rows):")
+                            st.code(strip_ansi(proposal["diagnostic_sql"]), language="sql")
+                        for alt in as_list(proposal.get("alternatives")):
+                            with st.expander("Alternative statement"):
+                                st.code(strip_ansi(alt), language="sql")
+                    preview = as_dict(fix.get("proposal_verification"))
+                    if preview:
+                        st.caption(
+                            "Preview check on a sandbox copy — this is NOT a verified fix: "
+                            f"rows {fmt(num(preview.get('rows_before')))} → {fmt(num(preview.get('rows_after')))}, "
+                            f"checks {'passed' if preview.get('passed') else 'did not all pass'}."
+                        )
             with t_adv:
                 st.code(advisory_sql or "-- No advisory SQL available for this query.", language="sql")
             with t_cmp:

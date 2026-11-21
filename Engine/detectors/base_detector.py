@@ -24,6 +24,7 @@ _ANALYTIC_TYPES = {
     "UNION_PART": "SET_OP",
     "SET_OPERATION": "SET_OP",
     "CTE": "CTE",
+    "PROJECTION": "PROJECTION",  # full-query check step: never part of the row flow
 }
 _ERROR_TYPES = {"SYNTAX_ERROR", "SECURITY_ERROR", "ENGINE_ERROR"}
 DML_KINDS = {"INSERT", "UPDATE", "DELETE", "MERGE", "COPY", "REPLACE"}

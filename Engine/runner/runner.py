@@ -4,10 +4,12 @@ Executes the parser's steps on DuckDB (SELECT analysis, DML, DDL, admin commands
 profiles every step, collects multi-column metrics and runs every detector plugin.
 """
 
+import difflib
 import importlib
 import inspect
 import logging
 import pkgutil
+import re
 import time
 from decimal import Decimal
 
@@ -212,11 +214,18 @@ class EchoEngineRunner:
                 entry["columns_metrics"] = self._column_metrics(columns, cursor.fetchall())
                 if entry["sum_value"] is None and entry["columns_metrics"]:
                     entry["sum_value"] = next(iter(entry["columns_metrics"].values()))
-            except Exception:  # noqa: BLE001 - metrics are best-effort
+            except Exception as exc:  # noqa: BLE001
                 entry["columns_metrics"] = {}
+                if self._is_reference_error(exc):  # unknown column / table is a real error, not a metrics glitch
+                    entry.update(status="failed", error=str(exc), error_type=type(exc).__name__)
         elif entry["row_count"] and entry["row_count"] > self.metrics_row_limit:
             entry["columns_metrics_skipped"] = True
         return entry
+
+    @staticmethod
+    def _is_reference_error(exc):
+        name = type(exc).__name__.lower()
+        return "binder" in name or "catalog" in name
 
     @staticmethod
     def _column_metrics(columns, rows):
@@ -304,7 +313,7 @@ class EchoEngineRunner:
         text = str(exc).lower()
         if "notimplemented" in name or "not implemented" in text:
             return True
-        if kind in FALLBACK_KINDS or step.get("step_type") == "ADMIN":
+        if kind in FALLBACK_KINDS or (step.get("step_type") == "ADMIN" and not step.get("read_only")):
             return any(tag in name for tag in _LIMITATION_TAGS)
         return False
 
@@ -326,10 +335,29 @@ class EchoEngineRunner:
             return "Data Type Conversion Error"
         return "Query Runtime Failure"
 
+    @staticmethod
+    def _reference_hints(message, tables):
+        """(unknown_name, [close matches]) from a binder / catalog message (best effort)."""
+        text = str(message or "")
+        found = re.search(r'(?:column|Table|View)(?: with name)? "?([\w.$]+)"?(?: not found| does not exist)', text, re.I)
+        unknown = found.group(1) if found else None
+        pool = []
+        for marker in (r"Did you mean\s+(.*)", r"Candidate bindings:\s*(.*)"):
+            match = re.search(marker, text, re.I | re.S)
+            if match:
+                pool += re.findall(r'"([^"]+)"', match.group(1).split("\n")[0])
+        if not pool and unknown and re.search(r"table|view", text, re.I):
+            pool = list(tables or [])
+        if unknown:
+            bare = unknown.split(".")[-1].lower()
+            pool = [p for p in dict.fromkeys(pool)
+                    if difflib.get_close_matches(bare, [p.split(".")[-1].lower()], 1, 0.5)]
+        return unknown, pool[:5]
+
     def _available_tables(self, limit=30):
         """Names of the tables / views the script can use (best effort, never raises)."""
         try:
-            rows = self.db.execute(
+            rows = (self._session or self.db).execute(
                 "SELECT table_name FROM information_schema.tables "
                 "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
                 "ORDER BY table_name LIMIT " + str(int(limit))
@@ -354,6 +382,7 @@ class EchoEngineRunner:
             bugs, detector_errors, detector_ms = [], [], {}
             detector_plugins = self.load_all_detectors()
             detector_errors.extend(self.load_errors)
+            available_tables = self._available_tables()  # while the session (temp tables) is still open
 
             for detector in detector_plugins:
                 t0 = time.perf_counter()
@@ -373,7 +402,6 @@ class EchoEngineRunner:
             self._close_session()
 
         # Failed steps: syntax / blocked statements always; others only if no detector explained them.
-        available_tables = self._available_tables()
         explained = {b.get("suspicious_step_id") for b in bugs}
         reported_scopes = set()
         for entry in step_trace:
@@ -389,9 +417,17 @@ class EchoEngineRunner:
                         "statement_index": entry.get("statement_index")}
             suggested = "Fix the statement text, or the table/column names and types it uses."
             error_kind = (entry.get("error_type") or "").lower()
+            close = []
+            if "catalog" in error_kind or "binder" in error_kind:
+                unknown, close = self._reference_hints(entry.get("error"), available_tables)
+                if unknown:
+                    evidence["unknown_reference"] = unknown
+                if close:
+                    evidence["did_you_mean"] = close
+                    suggested = "Unknown reference '%s'. Did you mean: %s?" % (unknown, ", ".join(close))
             if available_tables and ("catalog" in error_kind or "binder" in error_kind):
                 evidence["available_tables"] = available_tables
-                suggested = (
+                suggested = (suggested + " " if close else "") + (
                     "A table or column does not exist. Read the database message in the description "
                     "(it often says 'Did you mean ...'). Tables available here: "
                     + ", ".join(available_tables)

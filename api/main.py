@@ -221,6 +221,28 @@ def fix(request: FixRequest):
                 payload["verification"] = generator.verify(
                     report.original_sql, report.fixed_sql, tracked_sandbox, fixes=report.fixes
                 )
+            # A proposal is NEVER presented as a verified fix. When the proposal is concrete SQL, run the
+            # same checks on a sandbox copy and attach them as a preview (clearly labelled as such).
+            if (not report.applied and request.verify and report.proposed_sql
+                    and any(p.get("status") == "suggested" for p in report.proposals)):
+                try:
+                    dedupe = any(str(p.get("kind") or "").endswith(("dedupe_right_side", "pre_dedupe_for_aggregation"))
+                                 for p in report.proposals)
+                    preview = generator.verify(
+                        report.original_sql, report.proposed_sql, tracked_sandbox,
+                        fixes=[{"applied": True, "strategy_used": "dedupe_right_side_row_number"}] if dedupe else None,
+                    )
+                    preview["preview_only"] = True
+                    payload["proposal_verification"] = preview
+                except Exception as exc:  # noqa: BLE001 - the preview is a bonus
+                    log.warning("Proposal preview failed: %s", exc)
+        # One explicit status for the dashboard: verified | applied_unverified | applied | suggested | manual | none
+        status = report.status
+        if report.applied:
+            verification = payload.get("verification")
+            if isinstance(verification, dict):
+                status = "verified" if verification.get("passed") else "applied_unverified"
+        payload["status"] = status
         payload["timed_out"] = timed_out.is_set()
         if notes:
             payload["input_notes"] = notes

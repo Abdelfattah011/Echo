@@ -369,3 +369,116 @@ def replace_identifier(text: str, bad: str, good: str) -> str:
         cursor = match.end()
     pieces.append(text[cursor:])
     return "".join(pieces)
+
+
+# =========================================================================== #
+# Proposal builders (pure text): diagnostics, drafts and guidance
+# =========================================================================== #
+ECHO_PREFIX = "-- ECHO"
+
+
+def echo_comment(*lines: str) -> str:
+    """Comment lines that ECHO itself strips again (``strip_echo_headers``) when pasted back."""
+    return "".join(f"{ECHO_PREFIX} {' '.join(str(line).split())}\n" for line in lines if line)
+
+
+def quote_ident(name) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def error_position(message: str) -> Optional[Tuple[int, int]]:
+    """``(line, column)`` from a sqlglot error text such as ``Line 2, Col: 14``."""
+    match = re.search(r"Line\s+(\d+),\s*Col(?:umn)?:?\s*(\d+)", message or "", re.IGNORECASE)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def annotate_error(text: str, line: int, column: int) -> str:
+    """``text`` with an ECHO comment line ABOVE the offending line, a caret marking the column.
+
+    The marker goes above (never below) so the text that follows the statement in a script - its
+    ``;`` terminator - can never end up on a comment line and be swallowed by it. Only comment
+    lines are added, so no character of the SQL itself changes.
+    """
+    lines = text.split("\n")
+    if not lines:
+        return text
+    index = min(max(line, 1), len(lines)) - 1
+    caret = " " * (max(column, 1) - 1) + "^"
+    lines.insert(index, f"{ECHO_PREFIX} the parser stopped at the line below, column {column}:")
+    lines.insert(index + 1, f"{ECHO_PREFIX} {caret}")
+    return "\n".join(lines)
+
+
+def balance_report(text: str) -> List[str]:
+    """Human-readable structural problems of a statement (unclosed / extra brackets, open quote)."""
+    masked, open_quote = mask_code(text)
+    depth, extra = 0, 0
+    for ch in masked:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            if depth:
+                depth -= 1
+            else:
+                extra += 1
+    notes = []
+    if depth:
+        notes.append(f"{depth} opening parenthesis/es are never closed")
+    if extra:
+        notes.append(f"{extra} closing parenthesis/es have no opening one")
+    if open_quote:
+        notes.append(f"a {open_quote} quote is never closed")
+    return notes
+
+
+def nearest_names(bad: str, names, limit: int = 3) -> List[Tuple[str, int]]:
+    """The ``limit`` known names closest to ``bad`` as ``(name, distance)``, best first."""
+    scored = sorted(((str(n), edit_distance(bad, str(n))) for n in names), key=lambda item: (item[1], item[0]))
+    return scored[:limit]
+
+
+def draft_create_table(name: str, columns: "dict") -> str:
+    """A DRAFT ``CREATE TABLE`` for a missing table; column types come from how the query uses them."""
+    cols = ",\n".join(f"    {quote_ident(c)} {t}" for c, t in columns.items()) or "    -- add the columns your query needs"
+    return f"CREATE TABLE {quote_ident(name)} (\n{cols}\n)"
+
+
+def duplicate_check_sql(relation_sql: str, keys, prefix: str = "") -> str:
+    """Query that lists the key values that repeat (the proof of a fan-out)."""
+    cols = ", ".join(quote_ident(k) for k in keys)
+    return (
+        f"{prefix}SELECT {cols}, COUNT(*) AS row_count\n"
+        f"FROM {relation_sql} AS _t\n"
+        f"GROUP BY {cols}\n"
+        f"HAVING COUNT(*) > 1\n"
+        f"ORDER BY row_count DESC\n"
+        f"LIMIT 20"
+    )
+
+
+def unmatched_keys_sql(left_relation: str, left_alias: str, right_relation: str, right_alias: str, pairs, prefix: str = "") -> str:
+    """Query that shows the left rows that found no partner on the right (where rows are lost)."""
+    on = " AND ".join(
+        f"{quote_ident(left_alias)}.{quote_ident(lc)} = {quote_ident(right_alias)}.{quote_ident(rc)}" for lc, rc in pairs
+    )
+    first_right = quote_ident(pairs[0][1])
+    return (
+        f"{prefix}SELECT {quote_ident(left_alias)}.*\n"
+        f"FROM {left_relation} AS {quote_ident(left_alias)}\n"
+        f"LEFT JOIN {right_relation} AS {quote_ident(right_alias)} ON {on}\n"
+        f"WHERE {quote_ident(right_alias)}.{first_right} IS NULL\n"
+        f"LIMIT 20"
+    )
+
+
+def rank_join_columns(left_columns, right_columns) -> List[str]:
+    """Column names present on both sides, most key-like first (``*_id`` / ``id`` / ``*_key`` / ``*_code``)."""
+    right = {str(c).lower(): str(c) for c in right_columns}
+    common = [str(c) for c in left_columns if str(c).lower() in right]
+
+    def keyness(name: str) -> Tuple[int, str]:
+        lowered = name.lower()
+        score = 0 if lowered == "id" or lowered.endswith(("_id", "_key", "_code", "_no", "_number")) else 1
+        return score, lowered
+
+    return sorted(common, key=keyness)

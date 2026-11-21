@@ -28,6 +28,14 @@ comments between statements, a statement's leading comments) is copied verbatim;
 never contains ECHO comment lines; a rewrite that would drop any identifier / literal of the
 statement is refused.
 
+Proposals (new): whenever a finding cannot be applied automatically, the fixer still answers with
+a concrete PROPOSAL - never applied, never part of ``fixed_sql`` - and says how far to trust it:
+
+  ``applied``    rewritten by the fixer (the API upgrades it to ``verified`` after ``verify()`` passes)
+  ``suggested``  concrete SQL that parses (and plans when a DB is given): review grain / logic first
+  ``manual``     guidance, a diagnostic query or a draft: a human must act
+  ``none``       nothing to do
+
 Safety rules: a clean query is never altered; every rewrite is re-parsed (and, with a DB
 connection, planned with EXPLAIN) before it is returned; any doubt means ``applied=False``
 with the original SQL and a human-readable reason. Re-running the fixer on its own output
@@ -146,6 +154,15 @@ class FixResult:
     warnings: List[str] = field(default_factory=list)
     deterministic: Optional[bool] = None
     validation: Dict[str, Any] = field(default_factory=dict)
+    # ---- proposals (all optional; safe defaults keep every existing consumer working) ----
+    status: str = "none"                              # applied | suggested | manual | none
+    proposal_kind: Optional[str] = None               # e.g. dedupe_right_side, missing_table_draft, diagnostic
+    proposed_sql: Optional[str] = None                # the WHOLE script with only this proposal applied
+    proposed_statement: Optional[str] = None          # just the proposed statement
+    proposal_statement_index: Optional[int] = None    # 1-based index of the statement it replaces
+    diagnostic_sql: Optional[str] = None              # a query that proves / explores the problem
+    review_notes: List[str] = field(default_factory=list)
+    alternatives: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -160,6 +177,9 @@ class FixReport:
     original_sql: str
     fixes: List[FixResult] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    status: str = "none"                              # applied | suggested | manual | none
+    proposed_sql: Optional[str] = None                # script with every non-conflicting proposal applied
+    proposals: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -168,11 +188,35 @@ class FixReport:
             "original_sql": self.original_sql,
             "fixes": [f.to_dict() for f in self.fixes],
             "warnings": list(self.warnings),
+            "status": self.status,
+            "proposed_sql": self.proposed_sql,
+            "proposals": [dict(p) for p in self.proposals],
         }
 
 
 class FixSkipped(Exception):
-    """Raised inside a strategy when a safe rewrite is not possible (message = reason)."""
+    """Raised inside a strategy when a safe rewrite is not possible (message = reason).
+
+    ``proposable=False`` means there is nothing left to propose (already fixed / already unique);
+    ``payload`` optionally carries a best-effort candidate for the proposal layer.
+    """
+
+    def __init__(self, message: str = "", proposable: bool = True, payload: Any = None):
+        super().__init__(message)
+        self.proposable = proposable
+        self.payload = payload
+
+
+@dataclass
+class _Rewrite:
+    index: int
+    key: Tuple[Any, ...]
+    text: str                      # the new text of the whole statement (leading comments kept)
+    explanation: str
+    extras: Dict[str, Any]
+    checks: Dict[str, Any]
+    step_id: Any
+    target_table: Optional[str]
 
 
 @dataclass
@@ -246,12 +290,39 @@ class FixGenerator:
 
             if report.applied:
                 report.fixed_sql = self._splice(original, spans, texts)
+            self._summarise_proposals(report, original, spans, texts)
         except Exception as exc:  # noqa: BLE001 - the fixer must never crash its caller
             log.exception("Fix generation failed")
             report.applied = False
             report.fixed_sql = original
             report.warnings.append(f"Fix generation aborted safely: {type(exc).__name__}: {exc}")
         return self._clean_report(report)
+
+    def _summarise_proposals(self, report, original, spans, texts) -> None:
+        """Report-level status, the list of proposals and ONE script that applies the non-conflicting ones."""
+        for fix in report.fixes:
+            if fix.applied:
+                fix.status = "applied"
+            if fix.status in ("suggested", "manual"):
+                report.proposals.append({
+                    "bug_type": fix.bug_type, "target_step": fix.target_step, "status": fix.status,
+                    "kind": fix.proposal_kind, "statement_index": fix.proposal_statement_index,
+                    "statement_sql": fix.proposed_statement, "diagnostic_sql": fix.diagnostic_sql,
+                    "notes": list(fix.review_notes), "alternatives": list(fix.alternatives),
+                })
+        statuses = {f.status for f in report.fixes}
+        report.status = ("applied" if report.applied else "suggested" if "suggested" in statuses
+                         else "manual" if "manual" in statuses else "none")
+        edits: Dict[int, str] = {}
+        for fix in report.fixes:  # first proposal per statement wins: two proposals never overwrite each other
+            if not fix.applied and fix.proposed_statement and fix.proposal_statement_index:
+                edits.setdefault(fix.proposal_statement_index - 1, fix.proposed_statement)
+        if edits:
+            edited = list(texts)
+            for index, statement in edits.items():
+                if 0 <= index < len(edited):
+                    edited[index] = statement
+            report.proposed_sql = self._sanitize(self._splice(original, spans, edited))
 
     @staticmethod
     def _expand_findings(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -526,7 +597,15 @@ class FixGenerator:
         ("key type mismatch", "cast_join_key"),
         ("syntax error", "repair_syntax"),
         ("reference error", "repair_reference"),
+        # findings that are never auto-applied: they produce proposals / diagnostics only
+        ("complex aggregation", "propose_grain"),
+        ("row loss", "diagnose_unmatched"),
+        ("data drop", "diagnose_unmatched"),
+        ("blocked statement", "propose_execution"),
+        ("runtime failure", "propose_execution"),
+        ("conversion error", "propose_execution"),
     )
+    _PROPOSAL_ONLY = frozenset({"propose_grain", "diagnose_unmatched", "propose_execution"})
 
     def _fix_one(self, original, texts, bug, step_map, conn, seen, steps=None, trace=None) -> FixResult:
         bug_type = str(bug.get("bug_type") or "")
@@ -539,71 +618,94 @@ class FixGenerator:
             if bug.get("suggested_fix"):
                 result.explanation = f"Suggested manual fix: {bug['suggested_fix']}"
             return result
+        if strategy in self._PROPOSAL_ONLY:
+            result.warnings.append(f"No automatic rewrite exists for '{bug_type}'.")
+            if bug.get("suggested_fix"):
+                result.explanation = f"Suggested manual fix: {bug['suggested_fix']}"
+            self._attach_proposal(result, strategy, bug, original, texts, step_map, conn, steps, trace, "")
+            return result
         if evidence.get("likely_intentional"):
             result.warnings.append("The row expansion was proven intentional (aggregates on the many side); not rewritten.")
+            self._attach_proposal(result, strategy, bug, original, texts, step_map, conn, steps, trace, "intentional")
             return result
         if strategy in ("repair_syntax", "repair_reference"):
-            return self._fix_text_level(result, strategy, original, texts, bug, step_map, conn, seen)
+            return self._fix_text_level(result, strategy, original, texts, bug, step_map, conn, seen, steps, trace)
 
         try:
-            step_id = evidence.get("join_step") or bug.get("suspicious_step_id")
-            step = step_map.get(step_id)
-            if step is not None and not isinstance((step.get("join_details")), dict):
-                # e.g. "Inflated Totals" points at the aggregate: find the JOIN that multiplied the rows.
-                resolved = self._resolve_join_step(bug, step, steps or [], trace or [])
-                if resolved:
-                    step_id, step = resolved, step_map.get(resolved)
-            details = (step or {}).get("join_details")
-            if not step or not isinstance(details, dict) or not details.get("target_alias"):
-                raise FixSkipped("The finding does not point at a JOIN step that can be rewritten.")
-            result.target_step = step_id
-            result.target_table = details.get("target_table") or details.get("target_alias")
-
-            index = (step.get("statement_index") or 1) - 1
-            if not 0 <= index < len(texts):
-                raise FixSkipped("Could not map the finding to a statement of the script.")
-            key = (index, step.get("scope"), details.get("target_alias"), strategy)
-            if key in seen:
-                raise FixSkipped("This JOIN was already rewritten by an earlier finding.")
-
-            # Leading comments / blank lines are not part of the SQL: keep them exactly as written.
-            lead = _leading_trivia_len(texts[index])
-            prefix_text, body = texts[index][:lead], texts[index][lead:]
-            if not body.strip():
-                raise FixSkipped("The statement is empty.")
-
-            node = self._parse_chunk(body)
-            baseline = self._word_tokens(node.sql(dialect=self.options.dialect))
-            select = self._locate_select(node, step.get("scope"))
-            join = self._find_join(select, details["target_alias"])
-            ctx = _Context(node=node, select=select, join=join, step=step, bug=bug, conn=conn, chunk_index=index)
-
-            handler = {
-                "dedupe_right_side_row_number": self._dedupe_right_side,
-                "left_join_filter_to_on": self._left_join_filter_to_on,
-                "cast_join_key": self._cast_join_key,
-            }[strategy]
-            explanation, extras = handler(ctx)
-
-            new_sql = node.sql(dialect=self.options.dialect, pretty=self.options.pretty)
-            self._guard_no_token_loss(baseline, new_sql)
-            checks = self._validate(new_sql, strategy, conn)
-            texts[index] = (prefix_text + self._sanitize(new_sql)).rstrip().rstrip(";")
-            seen.add(key)
-
+            rw = self._rewrite_ast(strategy, bug, texts, step_map, conn, seen, steps, trace)
+            texts[rw.index] = rw.text
+            seen.add(rw.key)
+            result.target_step = rw.step_id
+            result.target_table = rw.target_table
             result.applied = True
+            result.status = "applied"
             result.strategy_used = strategy
-            result.explanation = self._sanitize(explanation)
-            result.validation = checks
-            result.warnings.extend(extras.get("warnings", []))
-            result.deterministic = extras.get("deterministic")
-            result.fixed_sql = texts[index]
+            result.explanation = self._sanitize(rw.explanation)
+            result.validation = rw.checks
+            result.warnings.extend(rw.extras.get("warnings", []))
+            result.deterministic = rw.extras.get("deterministic")
+            result.fixed_sql = texts[rw.index]
         except FixSkipped as skip:
             result.warnings.append(str(skip))
+            if skip.proposable:
+                self._attach_proposal(result, strategy, bug, original, texts, step_map, conn, steps, trace, str(skip))
         except Exception as exc:  # noqa: BLE001
             log.exception("Strategy %s failed", strategy)
             result.warnings.append(f"Rewrite abandoned safely ({type(exc).__name__}: {exc}).")
         return result
+
+    def _rewrite_ast(self, strategy, bug, texts, step_map, conn, seen, steps, trace, assume=False) -> _Rewrite:
+        """Build the AST rewrite of ONE JOIN. Does not mutate ``texts`` / ``seen``; raises FixSkipped.
+
+        ``assume=True`` is used by the proposal layer only: the dedupe no longer needs proof that the
+        key repeats (an already-unique key is still refused).
+        """
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        step_id = evidence.get("join_step") or bug.get("suspicious_step_id")
+        step = step_map.get(step_id)
+        if step is not None and not isinstance((step.get("join_details")), dict):
+            # e.g. "Inflated Totals" points at the aggregate: find the JOIN that multiplied the rows.
+            resolved = self._resolve_join_step(bug, step, steps or [], trace or [])
+            if resolved:
+                step_id, step = resolved, step_map.get(resolved)
+        details = (step or {}).get("join_details")
+        if not step or not isinstance(details, dict) or not details.get("target_alias"):
+            raise FixSkipped("The finding does not point at a JOIN step that can be rewritten.")
+
+        index = (step.get("statement_index") or 1) - 1
+        if not 0 <= index < len(texts):
+            raise FixSkipped("Could not map the finding to a statement of the script.", proposable=False)
+        key = (index, step.get("scope"), details.get("target_alias"), strategy)
+        if key in seen:
+            raise FixSkipped("This JOIN was already rewritten by an earlier finding.", proposable=False)
+
+        # Leading comments / blank lines are not part of the SQL: keep them exactly as written.
+        lead = _leading_trivia_len(texts[index])
+        prefix_text, body = texts[index][:lead], texts[index][lead:]
+        if not body.strip():
+            raise FixSkipped("The statement is empty.", proposable=False)
+
+        node = self._parse_chunk(body)
+        baseline = self._word_tokens(node.sql(dialect=self.options.dialect))
+        select = self._locate_select(node, step.get("scope"))
+        join = self._find_join(select, details["target_alias"])
+        ctx = _Context(node=node, select=select, join=join, step=step, bug=bug, conn=conn, chunk_index=index)
+
+        if strategy == "dedupe_right_side_row_number":
+            explanation, extras = self._dedupe_right_side(ctx, assume_duplicates=assume)
+        elif strategy == "left_join_filter_to_on":
+            explanation, extras = self._left_join_filter_to_on(ctx)
+        elif strategy == "cast_join_key":
+            explanation, extras = self._cast_join_key(ctx)
+        else:
+            raise FixSkipped(f"Unknown strategy '{strategy}'.", proposable=False)
+
+        new_sql = node.sql(dialect=self.options.dialect, pretty=self.options.pretty)
+        self._guard_no_token_loss(baseline, new_sql)
+        checks = self._validate(new_sql, strategy, conn)
+        text = (prefix_text + self._sanitize(new_sql)).rstrip().rstrip(";")
+        return _Rewrite(index, key, text, explanation, extras, checks, step_id,
+                        details.get("target_table") or details.get("target_alias"))
 
     @staticmethod
     def _resolve_join_step(bug, step, steps, trace) -> Optional[str]:
@@ -667,7 +769,7 @@ class FixGenerator:
     # ------------------------------------------------------------------ #
     # Strategy 1: deduplicate the "many" side of a fan-out JOIN
     # ------------------------------------------------------------------ #
-    def _dedupe_right_side(self, ctx: _Context) -> Tuple[str, Dict[str, Any]]:
+    def _dedupe_right_side(self, ctx: _Context, assume_duplicates: bool = False) -> Tuple[str, Dict[str, Any]]:
         d = _INTERNAL_DIALECT
         join, step = ctx.join, ctx.step
         side = str(join.side or "").upper()
@@ -678,7 +780,7 @@ class FixGenerator:
         if not isinstance(target, (exp.Table, exp.Subquery)):
             raise FixSkipped("The joined relation is not a table, CTE or sub-query.")
         if isinstance(target, exp.Subquery) and self._is_dedupe_subquery(target):
-            raise FixSkipped("The joined relation is already deduplicated.")
+            raise FixSkipped("The joined relation is already deduplicated.", proposable=False)
 
         alias = target.alias or (target.name if isinstance(target, exp.Table) else "")
         if not alias:
@@ -708,8 +810,8 @@ class FixGenerator:
 
         confirmed = self._confirm_duplicates(ctx.conn, prefix, relation_sql, alias_sql, keys, where_sql)
         if confirmed is False:
-            raise FixSkipped("The join key is already unique on the joined side; deduplication would not help.")
-        if confirmed is None and not (ctx.bug.get("evidence") or {}).get("confirmed"):
+            raise FixSkipped("The join key is already unique on the joined side; deduplication would not help.", proposable=False)
+        if confirmed is None and not assume_duplicates and not (ctx.bug.get("evidence") or {}).get("confirmed"):
             raise FixSkipped("Key duplication could not be confirmed (no DB connection / evidence); not rewriting.")
 
         order_sql, deterministic, notes = self._order_clause(ctx, prefix, relation_sql, alias, alias_sql, keys)
@@ -982,20 +1084,21 @@ class FixGenerator:
                 return current, notes, False
         return current, notes, False
 
-    def _fix_text_level(self, result, strategy, original, texts, bug, step_map, conn, seen) -> FixResult:
+    def _fix_text_level(self, result, strategy, original, texts, bug, step_map, conn, seen,
+                        steps=None, trace=None) -> FixResult:
         evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
         try:
             step = step_map.get(bug.get("suspicious_step_id")) or {}
             index = (step.get("statement_index") or evidence.get("statement_index") or 0) - 1
             if not 0 <= index < len(texts):
-                raise FixSkipped("Could not map the finding to a statement of the script.")
+                raise FixSkipped("Could not map the finding to a statement of the script.", proposable=False)
             key = ("text", index, strategy)
             if key in seen:
-                raise FixSkipped("This statement was already repaired by an earlier finding.")
+                raise FixSkipped("This statement was already repaired by an earlier finding.", proposable=False)
             lead = _leading_trivia_len(texts[index])
             prefix_text, body = texts[index][:lead], texts[index][lead:]
             if not body.strip():
-                raise FixSkipped("The statement is empty.")
+                raise FixSkipped("The statement is empty.", proposable=False)
 
             alternatives: List[str] = []
             if strategy == "repair_syntax":
@@ -1013,6 +1116,7 @@ class FixGenerator:
             texts[index] = (prefix_text + self._sanitize(new_body)).rstrip()
             seen.add(key)
             result.applied = True
+            result.status = "applied"
             result.strategy_used = strategy
             result.explanation = self._sanitize(f"{what}: " + "; ".join(notes) + ".")
             result.validation = {"parsed": True, "ast_sane": True, "db_planned": planned,
@@ -1022,6 +1126,9 @@ class FixGenerator:
             result.fixed_sql = texts[index]
         except FixSkipped as skip:
             result.warnings.append(str(skip))
+            if skip.proposable:
+                self._attach_proposal(result, strategy, bug, original, texts, step_map, conn, steps, trace,
+                                      str(skip), payload=skip.payload)
         except Exception as exc:  # noqa: BLE001
             log.exception("Strategy %s failed", strategy)
             result.warnings.append(f"Repair abandoned safely ({type(exc).__name__}: {exc}).")
@@ -1043,17 +1150,427 @@ class FixGenerator:
         ranked.sort(key=lambda item: item[:3])
         edits, kind, _, best, message = ranked[0]
         if kind == 3:
-            raise FixSkipped(f"The closest repair was rejected by the database ({message.splitlines()[0]}).")
+            raise FixSkipped(f"The closest repair was rejected by the database ({message.splitlines()[0]}).",
+                             payload=best.sql)
         sql, notes = best.sql, list(best.labels)
         planned: Optional[bool] = True if kind == 0 else None
         if kind == 2:
             sql, name_notes, ok = self._repair_names(conn, best.sql)
             if ok is not True:
-                raise FixSkipped("The syntax could be repaired but the statement still refers to unknown names.")
+                raise FixSkipped("The syntax could be repaired but the statement still refers to unknown names.",
+                                 payload=best.sql)
             notes += [f"replaced {n}" for n in name_notes]
             planned = True
         alternatives = [r[3].sql for r in ranked[1:4] if r[0] == edits and r[3].sql != sql]
         return sql, notes, planned, alternatives
+
+    # ------------------------------------------------------------------ #
+    # Proposal layer: concrete SQL / diagnostics for what cannot be applied automatically
+    # ------------------------------------------------------------------ #
+    def _attach_proposal(self, result, strategy, bug, original, texts, step_map, conn, steps, trace,
+                         reason, payload=None) -> None:
+        """Compute a proposal and record it on ``result``. Never raises, never touches ``texts``."""
+        try:
+            proposal = self._build_proposal(strategy, bug, texts, step_map, conn, steps or [], trace or [],
+                                            reason, payload)
+        except FixSkipped as skip:  # expected: e.g. the candidate was rejected by the database
+            result.review_notes.append(f"No concrete proposal: {skip}.")
+            return
+        except Exception as exc:  # noqa: BLE001 - a proposal is a bonus, never a failure
+            log.exception("Proposal for %s failed", strategy)
+            result.review_notes.append(f"No proposal could be built ({type(exc).__name__}).")
+            return
+        if not proposal:
+            return
+        result.proposal_kind = proposal.get("kind")
+        result.diagnostic_sql = proposal.get("diagnostic_sql")
+        result.review_notes = [self._sanitize(n) for n in proposal.get("notes", [])]
+        result.alternatives = [self._sanitize(a) for a in proposal.get("alternatives", [])]
+        statement, index = proposal.get("statement_sql"), proposal.get("statement_index")
+        if statement and index is not None:
+            spans = split_statement_spans(original)
+            if 0 <= index < len(spans):
+                edited = list(texts)
+                edited[index] = statement
+                result.proposed_statement = self._sanitize(statement)
+                result.proposal_statement_index = index + 1
+                result.proposed_sql = self._sanitize(self._splice(original, spans, edited))
+        # "suggested" needs concrete SQL; everything else is guidance for a human
+        result.status = "suggested" if result.proposed_sql and proposal.get("status") == "suggested" else "manual"
+        if not result.explanation and proposal.get("explanation"):
+            result.explanation = self._sanitize(proposal["explanation"])
+
+    def _statement_of(self, bug, texts, step_map):
+        """``(step, index, prefix, body)`` of the statement a finding belongs to."""
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        step = step_map.get(evidence.get("join_step") or bug.get("suspicious_step_id")) \
+            or step_map.get(bug.get("suspicious_step_id")) or {}
+        index = (step.get("statement_index") or evidence.get("statement_index") or 0) - 1
+        if not 0 <= index < len(texts):
+            raise FixSkipped("Could not map the finding to a statement of the script.", proposable=False)
+        lead = _leading_trivia_len(texts[index])
+        prefix, body = texts[index][:lead], texts[index][lead:]
+        if not body.strip():
+            raise FixSkipped("The statement is empty.", proposable=False)
+        return step, index, prefix, body
+
+    def _build_proposal(self, strategy, bug, texts, step_map, conn, steps, trace, reason, payload):
+        builders = {
+            "dedupe_right_side_row_number": self._proposal_dedupe,
+            "propose_grain": self._proposal_grain,
+            "diagnose_unmatched": self._proposal_unmatched,
+            "propose_execution": self._proposal_execution,
+            "repair_syntax": self._proposal_syntax,
+            "repair_reference": self._proposal_reference,
+            "cast_join_key": self._proposal_cast,
+            "left_join_filter_to_on": self._proposal_left_join,
+        }
+        builder = builders.get(strategy)
+        return builder(bug, texts, step_map, conn, steps, trace, reason, payload) if builder else None
+
+    # ---- JOIN fan-out / inflated totals ---------------------------------- #
+    def _proposal_dedupe(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        step_id = evidence.get("join_step") or bug.get("suspicious_step_id")
+        step = step_map.get(step_id) or {}
+        details = step.get("join_details") if isinstance(step.get("join_details"), dict) else {}
+        if evidence.get("cartesian_suspected") and not details.get("key_pairs"):
+            cartesian = self._proposal_cartesian(bug, texts, step_map, conn, steps, trace, reason, payload)
+            if cartesian:
+                return cartesian
+        try:
+            rw = self._rewrite_ast("dedupe_right_side_row_number", bug, texts, step_map, conn, set(),
+                                   steps, trace, assume=True)
+        except FixSkipped as skip:
+            notes = [f"Not rewritten automatically: {skip}.", "Check the join grain by hand with the query below."]
+            diagnostic = None
+            cols = [pair.get("right_column") for pair in (details.get("key_pairs") or []) if pair.get("right_column")]
+            if cols and details.get("target_relation_sql"):
+                diagnostic = repair.duplicate_check_sql(details["target_relation_sql"], cols, step.get("with_prefix") or "")
+            return {"kind": "diagnostic", "status": "manual", "notes": notes, "diagnostic_sql": diagnostic}
+        if reason == "intentional":
+            why = ("The row expansion looks intentional (aggregates sit on the many side). Apply this only if you "
+                   "really want ONE row per key; otherwise keep the query as it is.")
+        elif "could not be confirmed" in reason:
+            why = ("Key duplication could not be proven on the available data, so this rewrite is a proposal. "
+                   "Run the duplicate check on your real data before applying it.")
+        else:
+            why = f"Proposed instead of applied automatically: {reason}."
+        notes = [why, "Which duplicate is kept is a business decision (check the ORDER BY of the window)."]
+        notes += [w for w in rw.extras.get("warnings", []) if w not in notes]
+        diagnostic = None
+        pairs = details.get("key_pairs") or []
+        cols = [p.get("right_column") for p in pairs if p.get("right_column")]
+        if cols and details.get("target_relation_sql"):
+            diagnostic = repair.duplicate_check_sql(details["target_relation_sql"], cols, step.get("with_prefix") or "")
+        return {"kind": "dedupe_right_side", "status": "suggested", "statement_index": rw.index,
+                "statement_sql": rw.text, "notes": notes, "diagnostic_sql": diagnostic,
+                "explanation": rw.explanation}
+
+    def _proposal_cartesian(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        """CROSS JOIN / missing ON: propose a join condition on same-named, key-like columns."""
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        step_id = evidence.get("join_step") or bug.get("suspicious_step_id")
+        step = step_map.get(step_id) or {}
+        details = step.get("join_details") if isinstance(step.get("join_details"), dict) else {}
+        alias_map = step.get("alias_map") if isinstance(step.get("alias_map"), dict) else {}
+        right_alias, right_relation = details.get("target_alias"), details.get("target_relation_sql")
+        prefix = step.get("with_prefix") or ""
+        if not (right_alias and right_relation):
+            return None
+        right_cols = self._relation_columns(conn, prefix, right_relation, _quote_ident(right_alias)) or []
+        options = []
+        for left_alias, info in alias_map.items():
+            relation = info.get("relation_sql") if isinstance(info, dict) else None
+            if left_alias == right_alias or not relation:
+                continue
+            left_cols = self._relation_columns(conn, prefix, relation, _quote_ident(left_alias)) or []
+            for column in repair.rank_join_columns(left_cols, right_cols):
+                options.append((left_alias, column))
+        notes = ["The join has no condition, so every row meets every row (a Cartesian product)."]
+        if not options:
+            notes.append("No column with the same name exists on both sides: decide the join key yourself "
+                         f"(JOIN {right_alias} ON <left>.<key> = {right_alias}.<key>).")
+            return {"kind": "guidance", "status": "manual", "notes": notes}
+        notes.append("Candidate keys (same name on both sides): "
+                     + ", ".join(f"{a}.{c} = {right_alias}.{c}" for a, c in options[:4]) + ".")
+        if details.get("implicit_cross") or not details.get("explicit_cross"):
+            left_alias, column = options[0]
+            notes.append(f"Comma-style join: rewrite it as JOIN {right_alias} ON {left_alias}.{column} = {right_alias}.{column}.")
+            return {"kind": "guidance", "status": "manual", "notes": notes}
+        step_ctx, index, prefix_text, body = self._statement_of(bug, texts, step_map)
+        left_alias, column = options[0]
+        node = self._parse_chunk(body)
+        baseline = self._word_tokens(node.sql(dialect=self.options.dialect))
+        select = self._locate_select(node, step.get("scope"))
+        join = self._find_join(select, right_alias)
+        join.set("kind", None)
+        join.set("on", exp.EQ(this=exp.column(column, table=left_alias), expression=exp.column(column, table=right_alias)))
+        new_sql = node.sql(dialect=self.options.dialect, pretty=self.options.pretty)
+        self._guard_no_token_loss(baseline, new_sql)
+        self._validate(new_sql, "cartesian_join_condition", conn)
+        notes.append("Pick the key that really relates the two tables: the first candidate is only the most key-like name.")
+        return {"kind": "cartesian_join_condition", "status": "suggested", "statement_index": index,
+                "statement_sql": (prefix_text + self._sanitize(new_sql)).rstrip().rstrip(";"), "notes": notes,
+                "explanation": f"Replaced the unconditioned join with ON {left_alias}.{column} = {right_alias}.{column}."}
+
+    def _proposal_grain(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        """``Complex Aggregation & Join Workflow``: dedupe every JOIN whose key is proven to repeat."""
+        step, index, prefix_text, body = self._statement_of(bug, texts, step_map)
+        scope, statement_index = step.get("scope"), step.get("statement_index")
+        joins = [s for s in steps if s.get("scope") == scope and s.get("statement_index") == statement_index
+                 and s.get("step_type") == "JOIN" and isinstance(s.get("join_details"), dict)]
+        work = list(texts)
+        notes: List[str] = []
+        diagnostics: List[str] = []
+        unique_count = unchecked = rewritten = 0
+        for join_step in joins:
+            pseudo = {"bug_type": "Possible JOIN Fan-out", "suspicious_step_id": join_step.get("step_id"),
+                      "evidence": {"join_step": join_step.get("step_id"), "confirmed": False}}
+            try:
+                rw = self._rewrite_ast("dedupe_right_side_row_number", pseudo, work, step_map, conn, set(),
+                                       steps, trace, assume=False)
+            except FixSkipped as skip:
+                if not skip.proposable:
+                    unique_count += 1
+                else:
+                    unchecked += 1
+                    details = join_step["join_details"]
+                    cols = [p.get("right_column") for p in details.get("key_pairs") or [] if p.get("right_column")]
+                    if cols and details.get("target_relation_sql"):
+                        diagnostics.append(repair.duplicate_check_sql(
+                            details["target_relation_sql"], cols, join_step.get("with_prefix") or ""))
+                continue
+            work[rw.index] = rw.text
+            rewritten += 1
+            notes.append(rw.explanation)
+        if rewritten:
+            notes.insert(0, "JOIN + GROUP BY: at least one joined table repeats its join key, so its rows multiply "
+                            "the aggregates. Proposed: keep one row per key before the JOIN.")
+            notes.append("Review the grain: which duplicate to keep is a business decision.")
+            alternatives = []
+            variant = self._count_distinct_variant(work[index], step.get("scope"))
+            if variant:
+                alternatives.append(variant)
+                notes.append("Alternative (second statement): COUNT(DISTINCT col) instead of COUNT(col) when you "
+                             "only count rows of the left table; it does not help SUM / AVG.")
+            return {"kind": "pre_dedupe_for_aggregation", "status": "suggested", "statement_index": index,
+                    "statement_sql": work[index], "notes": notes, "alternatives": alternatives}
+        if joins and unique_count == len(joins):
+            return {"kind": "guidance", "status": "manual",
+                    "notes": ["Every joined table is unique on its join key: no rewrite is needed."]}
+        notes.append("Could not prove the grain of every JOIN on the available data. "
+                     "Run these checks on your real data: a returned row means that join multiplies rows.")
+        return {"kind": "diagnostic", "status": "manual", "notes": notes,
+                "diagnostic_sql": ";\n\n".join(diagnostics) if diagnostics else None}
+
+    def _count_distinct_variant(self, statement_text, scope):
+        """``COUNT(col)`` -> ``COUNT(DISTINCT col)`` (None when the statement has no such call)."""
+        lead = _leading_trivia_len(statement_text)
+        prefix_text, body = statement_text[:lead], statement_text[lead:]
+        try:
+            node = self._parse_chunk(body)
+            changed = False
+            for call in node.find_all(exp.Count):
+                argument = call.this
+                if isinstance(argument, exp.Column):
+                    call.set("this", exp.Distinct(expressions=[argument.copy()]))
+                    changed = True
+            if not changed:
+                return None
+            new_sql = node.sql(dialect=self.options.dialect, pretty=self.options.pretty)
+            self._validate(new_sql, "count_distinct", None)
+            return (prefix_text + self._sanitize(new_sql)).rstrip().rstrip(";")
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _proposal_cast(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        la, lc, ra, rc = (evidence.get(k) for k in ("left_alias", "left_column", "right_alias", "right_column"))
+        notes = [f"Not rewritten automatically: {reason}." if reason else "Not rewritten automatically."]
+        if la and lc and ra and rc:
+            notes.append(f"Compare the keys with an explicit conversion, e.g. TRY_CAST({la}.{lc} AS {evidence.get('right_type')}) "
+                         f"= {ra}.{rc} (or the other way round), or store both columns with the same type.")
+        return {"kind": "guidance", "status": "manual", "notes": notes}
+
+    def _proposal_left_join(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        return {"kind": "guidance", "status": "manual",
+                "notes": [f"Not rewritten automatically: {reason}." if reason else "Not rewritten automatically.",
+                          "Move the condition on the right-hand table from WHERE into the JOIN's ON clause by hand "
+                          "if you want to keep the left rows that have no partner."]}
+
+    # ---- syntax ----------------------------------------------------------- #
+    def _proposal_syntax(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        step, index, prefix_text, body = self._statement_of(bug, texts, step_map)
+        if payload:
+            return {"kind": "syntax_candidate", "status": "suggested", "statement_index": index,
+                    "statement_sql": (prefix_text + self._sanitize(payload)).rstrip(),
+                    "notes": [f"Closest repair found, but it is not safe to apply automatically: {reason}.",
+                              "Check it carefully: it only fixes the form of the statement, not its meaning."],
+                    "explanation": "Best-guess syntax repair (not applied)."}
+        message = str(bug.get("description") or "")
+        notes = list(repair.balance_report(body))
+        notes.append("No safe automatic repair was found (tried quotes, parentheses, commas, repeated / "
+                     "mistyped keywords, == and smart quotes).")
+        position = repair.error_position(message)
+        statement = None
+        if position:
+            statement = prefix_text + repair.annotate_error(body, *position)
+            notes.append("The statement below is unchanged; a comment line marks where the parser stopped.")
+        return {"kind": "syntax_guidance", "status": "manual", "statement_index": index if statement else None,
+                "statement_sql": statement, "notes": notes}
+
+    # ---- unknown tables / columns ----------------------------------------- #
+    def _proposal_reference(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        step, index, prefix_text, body = self._statement_of(bug, texts, step_map)
+        evidence = bug.get("evidence") if isinstance(bug.get("evidence"), dict) else {}
+        message = str(bug.get("description") or "")
+        parsed = repair.parse_reference_error(message)
+        if not parsed:
+            _, planner_message = self._explain(conn, body)
+            parsed = repair.parse_reference_error(planner_message)
+        notes: List[str] = []
+        if not parsed:
+            return {"kind": "guidance", "status": "manual",
+                    "notes": ["The database message does not name the unknown object: read it and fix the name by hand."]}
+        bad, suggestions = parsed
+        # (a) a near miss that is too far to apply automatically, but still plans: propose it for review
+        for good in suggestions:
+            candidate = repair.replace_identifier(body, bad, good)
+            if candidate == body:
+                continue
+            fixed, more, ok = self._repair_names(conn, candidate)
+            if ok is True:
+                return {"kind": "reference_candidate", "status": "suggested", "statement_index": index,
+                        "statement_sql": (prefix_text + self._sanitize(fixed)).rstrip(),
+                        "notes": [f"'{bad}' -> '{good}' is the closest name the database knows, but it is not "
+                                  "close enough to apply automatically. Confirm it is really the object you meant."]
+                                 + [f"Also replaced {n}." for n in more],
+                        "explanation": f"Best-guess name replacement (not applied): '{bad}' -> '{good}'."}
+        # (b) a missing table: draft it from the way the query uses it
+        is_table = bool(re.search(r"table with name|referenced table", message, re.IGNORECASE))
+        available = [str(t) for t in evidence.get("available_tables") or []]
+        if available:
+            near = repair.nearest_names(bad, available)
+            notes.append("Tables available here: " + ", ".join(available) + ". Closest to "
+                         f"'{bad}': " + ", ".join(f"{n}" for n, _ in near) + ".")
+        if is_table:
+            draft = self._draft_missing_table(body, bad, conn)
+            if draft:
+                notes.append(f"'{bad}' does not exist. A DRAFT table definition is proposed before the statement: "
+                             "check the column types and load real data.")
+                return {"kind": "missing_table_draft", "status": "manual", "statement_index": index,
+                        "statement_sql": draft + ";\n\n" + prefix_text + body, "notes": notes}
+        else:
+            columns = self._columns_in_scope(body, conn)
+            if columns:
+                notes.append(f"Column '{bad}' was not found. Columns available: " + "; ".join(
+                    f"{t}({', '.join(c[:12])})" for t, c in columns.items()) + ".")
+                near = repair.nearest_names(bad, [c for cols in columns.values() for c in cols])
+                if near:
+                    notes.append("Closest column names: " + ", ".join(n for n, _ in near) + ".")
+        if not notes:
+            notes.append(f"'{bad}' is unknown and no close match exists: fix the name or create the object.")
+        return {"kind": "guidance", "status": "manual", "notes": notes}
+
+    def _draft_missing_table(self, body, bad, conn) -> Optional[str]:
+        """``CREATE TABLE`` draft for table ``bad``: columns from the way the statement uses it."""
+        node = self._parse_chunk(body)
+        target = next((t for t in node.find_all(exp.Table) if t.name.lower() == bad.lower()), None)
+        if target is None:
+            return None
+        alias = (target.alias or target.name).lower()
+        others = {(t.alias or t.name).lower(): t.name for t in node.find_all(exp.Table) if t is not target}
+        columns: Dict[str, str] = {}
+        for column in node.find_all(exp.Column):
+            if (column.table or "").lower() != alias or column.name in columns:
+                continue
+            kind = "VARCHAR"
+            if column.find_ancestor(exp.Sum, exp.Avg, exp.Min, exp.Max):
+                kind = "DECIMAL(18,2)"
+            comparison = column.find_ancestor(exp.EQ)
+            if comparison is not None and conn is not None:
+                for side in (comparison.this, comparison.expression):
+                    if isinstance(side, exp.Column) and (side.table or "").lower() in others:
+                        try:
+                            rows = conn.execute(
+                                f'DESCRIBE SELECT {_quote_ident(side.name)} FROM {_quote_ident(others[side.table.lower()])}'
+                            ).fetchall()
+                            kind = str(rows[0][1]) if rows else kind
+                        except Exception:  # noqa: BLE001
+                            pass
+            columns[column.name] = kind
+        return repair.draft_create_table(target.name, columns)
+
+    def _columns_in_scope(self, body, conn) -> Dict[str, List[str]]:
+        if conn is None:
+            return {}
+        out: Dict[str, List[str]] = {}
+        try:
+            for table in self._parse_chunk(body).find_all(exp.Table):
+                try:
+                    cursor = conn.execute(f"SELECT * FROM {_quote_ident(table.name)} LIMIT 0")
+                    out[table.name] = [c[0] for c in cursor.description]
+                except Exception:  # noqa: BLE001
+                    continue
+        except Exception:  # noqa: BLE001
+            return {}
+        return out
+
+    # ---- row loss ----------------------------------------------------------- #
+    def _proposal_unmatched(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        step = step_map.get(bug.get("suspicious_step_id")) or {}
+        details = step.get("join_details") if isinstance(step.get("join_details"), dict) else {}
+        alias_map = step.get("alias_map") if isinstance(step.get("alias_map"), dict) else {}
+        notes = ["Rows disappear when their key finds no partner. Compare key formats on both sides: "
+                 "types, leading / trailing spaces, upper / lower case, leading zeros."]
+        pairs = [p for p in details.get("key_pairs") or [] if p.get("left_alias") and p.get("left_column") and p.get("right_column")]
+        if not pairs or not details.get("target_relation_sql"):
+            return {"kind": "guidance", "status": "manual", "notes": notes}
+        left_alias = pairs[0]["left_alias"]
+        info = alias_map.get(left_alias) if isinstance(alias_map.get(left_alias), dict) else {}
+        if not info.get("relation_sql"):
+            return {"kind": "guidance", "status": "manual", "notes": notes}
+        same_side = [(p["left_column"], p["right_column"]) for p in pairs if p["left_alias"] == left_alias]
+        diagnostic = repair.unmatched_keys_sql(
+            info["relation_sql"], left_alias, details["target_relation_sql"], details.get("target_alias") or "r",
+            same_side, step.get("with_prefix") or "")
+        notes.append("The query below lists left rows that found no partner: those are the lost rows.")
+        return {"kind": "diagnostic", "status": "manual", "notes": notes, "diagnostic_sql": diagnostic}
+
+    # ---- blocked / failing statements -------------------------------------- #
+    def _proposal_execution(self, bug, texts, step_map, conn, steps, trace, reason, payload):
+        step, index, prefix_text, body = self._statement_of(bug, texts, step_map)
+        bug_type = str(bug.get("bug_type") or "").lower()
+        notes = [str(bug.get("description") or "The statement failed.")]
+        try:
+            node = self._parse_chunk(body)
+        except Exception:  # noqa: BLE001
+            node = None
+        if isinstance(node, (exp.Delete, exp.Update)) and node.this is not None:
+            where = node.args.get("where")
+            preview = f"SELECT * FROM {node.this.sql(dialect=_INTERNAL_DIALECT)}" + (
+                f" {where.sql(dialect=_INTERNAL_DIALECT)}" if where is not None else "")
+            notes.append("This statement changes data, so ECHO never applies a fix to it automatically and cannot "
+                         "verify one. The query below previews the rows it would affect: run it first.")
+            return {"kind": "dml_preview", "status": "manual", "notes": notes, "diagnostic_sql": preview}
+        if isinstance(node, exp.Insert) and isinstance(node.args.get("expression"), exp.Select):
+            notes.append("The SELECT part of the INSERT is shown below so you can test the rows it would write.")
+            return {"kind": "dml_preview", "status": "manual", "notes": notes,
+                    "diagnostic_sql": node.args["expression"].sql(dialect=_INTERNAL_DIALECT, pretty=True)}
+        if "conversion" in bug_type and node is not None:
+            changed = False
+            for cast in list(node.find_all(exp.Cast)):
+                cast.replace(exp.TryCast(this=cast.this.copy(), to=cast.args["to"].copy()))
+                changed = True
+            if changed:
+                new_sql = node.sql(dialect=self.options.dialect, pretty=self.options.pretty)
+                self._validate(new_sql, "try_cast_variant", conn)
+                notes.append("Every CAST became TRY_CAST: values that cannot be converted turn into NULL instead of "
+                             "raising an error. Check how many NULLs that produces before trusting the result.")
+                return {"kind": "try_cast_variant", "status": "suggested", "statement_index": index,
+                        "statement_sql": (prefix_text + self._sanitize(new_sql)).rstrip().rstrip(";"), "notes": notes}
+        return {"kind": "guidance", "status": "manual", "notes": notes}
 
     # ------------------------------------------------------------------ #
     # AST navigation
@@ -1176,6 +1693,8 @@ class FixGenerator:
     def _clean_report(self, report: FixReport) -> FixReport:
         report.fixed_sql = self._sanitize(report.fixed_sql)
         report.warnings = [self._sanitize(w) for w in report.warnings]
+        if report.proposed_sql is not None:
+            report.proposed_sql = self._sanitize(report.proposed_sql)
         for fix in report.fixes:
             fix.fixed_sql = self._sanitize(fix.fixed_sql)
             fix.explanation = self._sanitize(fix.explanation)

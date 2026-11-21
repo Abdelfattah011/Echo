@@ -295,6 +295,32 @@ class BaseBugDetector(ABC):
             previous[scope] = {"rows": rows, "step_id": flow[-1]["step_id"]}
         return flow
 
+    def join_right_key_unique(self, step: Dict[str, Any], db_connection: Any) -> Optional[bool]:
+        """True when the JOIN's right-hand key is unique (the join cannot multiply rows),
+        False when it repeats, None when that cannot be checked (no connection / metadata,
+        RIGHT / FULL / CROSS joins, no plain key equality)."""
+        details = step.get("join_details") if isinstance(step.get("join_details"), dict) else {}
+        pairs = details.get("key_pairs") or []
+        relation = details.get("target_relation_sql")
+        columns = [p.get("right_column") for p in pairs if isinstance(p, dict) and p.get("right_column")]
+        if db_connection is None or not relation or not columns:
+            return None
+        if details.get("join_type") not in ("INNER", "LEFT"):
+            return None
+        quote = lambda name: '"' + str(name).replace('"', '""') + '"'  # noqa: E731
+        cols = ", ".join(quote(c) for c in columns)
+        not_null = " AND ".join(f"{quote(c)} IS NOT NULL" for c in columns)
+        prefix = step.get("with_prefix") or ""
+        src = f"{relation} AS _echo_rel"
+        try:
+            rows = db_connection.execute(f"{prefix}SELECT COUNT(*) FROM {src} WHERE {not_null}").fetchone()[0]
+            distinct = db_connection.execute(
+                f"{prefix}SELECT COUNT(*) FROM (SELECT DISTINCT {cols} FROM {src} WHERE {not_null}) AS _echo_d"
+            ).fetchone()[0]
+        except Exception:  # noqa: BLE001 - best-effort proof
+            return None
+        return int(rows) == int(distinct)
+
     def find_join_inflations(self, flow: List[Dict[str, Any]], min_ratio: float = 1.05) -> List[Dict[str, Any]]:
         """JOIN steps whose row count grew by more than ``min_ratio`` versus the previous step."""
         found = []

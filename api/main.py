@@ -3,6 +3,7 @@ import logging
 import math
 import os
 import threading
+from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -11,12 +12,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from Engine.parser.parser import parse_sql_to_steps, split_statements
+from Engine.fixer.fixer import FixGenerator
+from Engine.parser.parser import normalize_sql_input, parse_sql_to_steps, split_statements
 from Engine.runner.runner import EchoEngineRunner
 
 log = logging.getLogger("echo.api")
 
-app = FastAPI(title="ECHO Enterprise SQL Intelligence API", version="3.0")
+app = FastAPI(title="ECHO Enterprise SQL Intelligence API", version="4.0")
 
 # Browser dashboards need CORS. Restrict this in production, e.g. ECHO_CORS_ORIGINS="https://dash.example.com"
 app.add_middleware(
@@ -61,6 +63,37 @@ def new_sandbox():
         except Exception as exc:  # noqa: BLE001 - older DuckDB versions lack some settings
             log.warning("Could not fully sandbox the connection: %s", exc)
     return conn
+
+
+@contextmanager
+def deadline(*targets):
+    """Interrupt every target (connection / cursor) if the block runs longer than the timeout.
+
+    ``targets`` may be objects or zero-argument callables returning a list of objects (so that
+    connections created inside the block are covered too). Yields an Event that is set on timeout.
+    """
+    timed_out = threading.Event()
+
+    def interrupt():
+        timed_out.set()
+        for target in targets:
+            try:
+                items = target() if callable(target) and not hasattr(target, "interrupt") else [target]
+            except Exception:  # noqa: BLE001
+                continue
+            for item in items or []:
+                try:
+                    item.interrupt()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    timer = threading.Timer(QUERY_TIMEOUT_SECONDS, interrupt)
+    timer.daemon = True
+    timer.start()
+    try:
+        yield timed_out
+    finally:
+        timer.cancel()
 
 
 def clean(value):
@@ -116,49 +149,93 @@ def health():
 # does not list (verdict, warnings, profiling, scope, rows_affected, fallback ...).
 @app.post("/investigate", response_model=Dict[str, Any])
 def investigate(request: InvestigateRequest):
-    if not request.sql.strip():
+    # ECHO's own advisory comments ("-- ECHO ...") and CRLF line endings are removed once, here,
+    # so pasting a suggested fix back into the editor can never feed ECHO its own output.
+    sql, notes = normalize_sql_input(request.sql)
+    if not sql.strip():
         raise HTTPException(status_code=400, detail="SQL query cannot be empty.")
 
     conn = None
-    timer = None
     try:
         conn = new_sandbox()
         runner = EchoEngineRunner(conn)
-        timed_out = threading.Event()
+        # The runner executes on a session cursor; interrupt it as well as the connection.
+        with deadline(lambda: [getattr(runner, "_session", None), conn]) as timed_out:
+            # Syntax / unsupported statements become step_type SYNTAX_ERROR inside the steps,
+            # and the runner reports them per statement while still analysing the rest of the script.
+            parsed_steps = parse_sql_to_steps(sql)
+            if not parsed_steps:
+                return engine_error(sql, "Failed to extract execution steps.")
 
-        def interrupt():
-            timed_out.set()
-            # The runner executes on a session cursor; interrupt it as well as the connection.
-            for target in (getattr(runner, "_session", None), conn):
-                try:
-                    target.interrupt()
-                except Exception:  # noqa: BLE001
-                    pass
-
-        timer = threading.Timer(QUERY_TIMEOUT_SECONDS, interrupt)
-        timer.start()
-
-        # Syntax / unsupported statements become step_type SYNTAX_ERROR inside the steps,
-        # and the runner reports them per statement while still analysing the rest of the script.
-        parsed_steps = parse_sql_to_steps(request.sql)
-        if not parsed_steps:
-            return engine_error(request.sql, "Failed to extract execution steps.")
-
-        result = runner.analyze_query(request.sql, parsed_steps)
-        result["timed_out"] = timed_out.is_set()
+            result = runner.analyze_query(sql, parsed_steps)
+            result["timed_out"] = timed_out.is_set()
+        if notes:
+            result["input_notes"] = notes
         return clean(result)
 
     except Exception as exc:  # noqa: BLE001
         log.exception("Unexpected engine failure")
-        return engine_error(request.sql, f"Unexpected engine failure: {type(exc).__name__}: {exc}")
+        return engine_error(sql, f"Unexpected engine failure: {type(exc).__name__}: {exc}")
     finally:
-        if timer is not None:
-            timer.cancel()
         if conn is not None:
             try:
                 conn.close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+class FixRequest(BaseModel):
+    sql: str = Field(..., max_length=MAX_SQL_CHARS)
+    verify: bool = True
+
+
+@app.post("/fix", response_model=Dict[str, Any])
+def fix(request: FixRequest):
+    """Analyse the SQL, rewrite what can be fixed safely, and (optionally) prove the fix on fresh sandboxes."""
+    sql, notes = normalize_sql_input(request.sql)
+    if not sql.strip():
+        raise HTTPException(status_code=400, detail="SQL query cannot be empty.")
+    conn = None
+    sandboxes = []
+
+    def tracked_sandbox():
+        sandbox = new_sandbox()
+        sandboxes.append(sandbox)  # so the deadline can interrupt the verification runs as well
+        return sandbox
+
+    try:
+        conn = new_sandbox()
+        runner = EchoEngineRunner(conn)
+        with deadline(lambda: [getattr(runner, "_session", None), conn, *sandboxes]) as timed_out:
+            steps = parse_sql_to_steps(sql)
+            analysis = runner.analyze_query(sql, steps)
+            generator = FixGenerator()
+            report = generator.fix_all(sql, analysis, conn, parsed_steps=steps)
+            payload = report.to_dict()
+            payload["analysis"] = {
+                "verdict": analysis.get("verdict"),
+                "first_suspicious_step": analysis.get("first_suspicious_step"),
+                "detected_bugs": analysis.get("detected_bugs", []),
+            }
+            if report.applied and request.verify:
+                payload["verification"] = generator.verify(
+                    report.original_sql, report.fixed_sql, tracked_sandbox, fixes=report.fixes
+                )
+        payload["timed_out"] = timed_out.is_set()
+        if notes:
+            payload["input_notes"] = notes
+        return clean(payload)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Fix endpoint failure")
+        return {"applied": False, "fixed_sql": sql, "original_sql": sql, "fixes": [],
+                "warnings": [f"Unexpected engine failure: {type(exc).__name__}: {exc}"]}
+    finally:
+        for handle in [conn, *sandboxes]:
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
 
 @app.get("/cases")

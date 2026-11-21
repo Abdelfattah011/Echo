@@ -1,6 +1,9 @@
+import logging
 from typing import Any, Dict, List, Optional
 
 from Engine.detectors.base_detector import SEVERITY_RANK, BaseBugDetector
+
+log = logging.getLogger("echo.detectors.general")
 
 
 class GeneralAnomalyDetector(BaseBugDetector):
@@ -24,8 +27,14 @@ class GeneralAnomalyDetector(BaseBugDetector):
       boundaries are never treated as "data drops".
     * Row INFLATION belongs to FanOutDetector: check 5 stays silent when a JOIN inflated rows,
       so the two detectors never raise conflicting alerts for the same problem.
-    * One report is returned (the most severe, earliest). Every other finding is attached to
-      it as ``evidence["additional_findings"]`` instead of being lost.
+    * One report is returned (the most severe, earliest). Every other finding is attached
+      to it as ``evidence["additional_findings"]`` instead of being lost.
+
+    Robustness
+    ----------
+    * Every check runs in isolation: a failure inside one check (unexpected types, missing keys,
+      partial / failed execution traces) is logged and skipped, it never breaks the analysis and
+      never hides the findings of the other checks.
     """
 
     PERFORMANCE_THRESHOLD_MS = 3000
@@ -52,45 +61,69 @@ class GeneralAnomalyDetector(BaseBugDetector):
         """Scans for general anomalies, returns None if everything is clean."""
         if not isinstance(step_trace, list) or not step_trace:
             return None
+        parsed_steps = parsed_steps if isinstance(parsed_steps, list) else []
 
         threshold = self.to_number(kwargs.get("performance_threshold_ms"))
-        threshold = self.PERFORMANCE_THRESHOLD_MS if threshold is None else threshold
+        if threshold is None or threshold < 0:
+            threshold = self.PERFORMANCE_THRESHOLD_MS
 
-        flow = self.collect_row_flow(parsed_steps, step_trace)
+        flow = self._safe(lambda: self.collect_row_flow(parsed_steps, step_trace), default=[])
+        flow = [item for item in (flow if isinstance(flow, list) else []) if isinstance(item, dict)]
+
         findings: List[Dict[str, Any]] = []
-        findings += self._check_performance(step_trace, threshold)
-        findings += self._check_data_drop(flow)
+        findings += self._safe(lambda: self._check_performance(step_trace, threshold), default=[])
+        findings += self._safe(lambda: self._check_data_drop(flow), default=[])
         if self.REPORT_SEVERE_ROW_LOSS:
-            findings += self._check_severe_join_loss(flow)
+            findings += self._safe(lambda: self._check_severe_join_loss(flow), default=[])
         if self.REPORT_EMPTY_SOURCE:
-            findings += self._check_empty_source(flow)
+            findings += self._safe(lambda: self._check_empty_source(flow), default=[])
 
         # The workflow note is informational: only when nothing else is wrong and FanOutDetector
         # has nothing to say about row inflation.
-        if not findings and self.REPORT_COMPLEX_WORKFLOW \
-                and not self.find_join_inflations(flow, self.MIN_INFLATION_RATIO):
-            findings += self._check_complex_workflow(parsed_steps, step_trace)
+        if not findings and self.REPORT_COMPLEX_WORKFLOW:
+            inflated = self._safe(
+                lambda: self.find_join_inflations(flow, self.MIN_INFLATION_RATIO), default=None
+            )
+            if not inflated:
+                findings += self._safe(
+                    lambda: self._check_complex_workflow(parsed_steps, step_trace, db_connection), default=[]
+                )
 
+        findings = [f for f in findings if isinstance(f, dict)]
         if not findings:
             return None
 
-        findings.sort(key=lambda f: (SEVERITY_RANK.get(f["severity"], 9), f["_index"]))
+        findings.sort(key=lambda f: (SEVERITY_RANK.get(f.get("severity"), 9), f.get("_index", 0)))
         primary, others = findings[0], findings[1:]
         extras = [
-            {"bug_type": f["bug_type"], "severity": f["severity"],
-             "suspicious_step_id": f["suspicious_step_id"], "description": f["description"]}
+            {"bug_type": f.get("bug_type"), "severity": f.get("severity"),
+             "suspicious_step_id": f.get("suspicious_step_id"), "description": f.get("description")}
             for f in others[: self.MAX_ADDITIONAL]
         ]
         for finding in findings:
             finding.pop("_index", None)
         if extras:
-            primary["evidence"]["additional_findings"] = extras
+            evidence = primary.get("evidence")
+            if not isinstance(evidence, dict):
+                evidence = {}
+                primary["evidence"] = evidence
+            evidence["additional_findings"] = extras
         return primary
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _safe(func, default=None):
+        """Run one check; log and swallow unexpected errors so the other checks still run."""
+        try:
+            result = func()
+        except Exception:  # noqa: BLE001
+            log.exception("GeneralAnomalyDetector check failed")
+            return default
+        return default if result is None else result
+
     def _finding(self, index, **fields) -> Dict[str, Any]:
         report = self.report(**fields)
-        report["_index"] = index
+        report["_index"] = index if isinstance(index, int) else 0
         return report
 
     # 1) Performance ---------------------------------------------------- #
@@ -124,22 +157,22 @@ class GeneralAnomalyDetector(BaseBugDetector):
     def _check_data_drop(self, flow) -> List[Dict[str, Any]]:
         findings = []
         for item in flow:
-            if item["category"] == "BASE" or not item["prev_rows"] or item["rows"] != 0:
+            if item.get("category") == "BASE" or not item.get("prev_rows") or item.get("rows") != 0:
                 continue
-            step_id = item["step_id"]
+            step_id = item.get("step_id")
             findings.append(self._finding(
-                item["index"],
+                item.get("index"),
                 bug_type="Silent Data Drop / Empty Result Set",
                 severity="High",
                 description=(
                     f"Data flow dropped to 0 rows at step '{step_id}' "
-                    f"(Type: {item['step_type'] or 'UNKNOWN'}). "
+                    f"(Type: {item.get('step_type') or 'UNKNOWN'}). "
                     f"Check for overly restrictive filters or mismatched join conditions."
                 ),
                 suspicious_step_id=step_id,
-                scope=item["scope"],
-                evidence={"rows_before": item["prev_rows"], "rows_after": 0,
-                          "previous_step": item["prev_step_id"], "category": item["category"]},
+                scope=item.get("scope"),
+                evidence={"rows_before": item.get("prev_rows"), "rows_after": 0,
+                          "previous_step": item.get("prev_step_id"), "category": item.get("category")},
                 suggested_fix="Inspect sample key values on both sides of the join and the filter constants.",
             ))
         return findings
@@ -148,22 +181,26 @@ class GeneralAnomalyDetector(BaseBugDetector):
     def _check_severe_join_loss(self, flow) -> List[Dict[str, Any]]:
         findings = []
         for item in flow:
-            before, after = item["prev_rows"], item["rows"]
-            if item["category"] != "JOIN" or not before or before < self.SEVERE_LOSS_MIN_ROWS:
+            before, after = item.get("prev_rows"), item.get("rows")
+            if item.get("category") != "JOIN":
+                continue
+            if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
+                continue
+            if before < self.SEVERE_LOSS_MIN_ROWS:
                 continue
             if after == 0 or after > before * self.SEVERE_LOSS_RATIO:  # 0 rows is the data-drop check
                 continue
             lost = 100.0 * (1 - after / before)
             findings.append(self._finding(
-                item["index"],
+                item.get("index"),
                 bug_type="Severe Row Loss at JOIN",
                 severity="Medium",
                 description=(
-                    f"Step '{item['step_id']}' kept only {after:,} of {before:,} rows ({lost:.1f}% lost). "
+                    f"Step '{item.get('step_id')}' kept only {after:,} of {before:,} rows ({lost:.1f}% lost). "
                     f"Almost no key values found a partner: check key formats, types, case and whitespace."
                 ),
-                suspicious_step_id=item["step_id"],
-                scope=item["scope"],
+                suspicious_step_id=item.get("step_id"),
+                scope=item.get("scope"),
                 evidence={"rows_before": before, "rows_after": after, "rows_lost_pct": round(lost, 1)},
                 suggested_fix="Compare sample key values from both tables; normalise types, trimming and case.",
                 confidence="medium",
@@ -174,20 +211,20 @@ class GeneralAnomalyDetector(BaseBugDetector):
     def _check_empty_source(self, flow) -> List[Dict[str, Any]]:
         findings = []
         for item in flow:
-            if item["category"] != "BASE" or item["rows"] != 0:
+            if item.get("category") != "BASE" or item.get("rows") != 0:
                 continue
-            step = item["step"]
-            name = step.get("name") or step.get("step_id")
+            step = item.get("step") if isinstance(item.get("step"), dict) else {}
+            name = step.get("name") or step.get("step_id") or item.get("step_id")
             findings.append(self._finding(
-                item["index"],
+                item.get("index"),
                 bug_type="Empty Source Table",
                 severity="Low",
                 description=(
-                    f"The source relation '{name}' returned 0 rows at step '{item['step_id']}', "
+                    f"The source relation '{name}' returned 0 rows at step '{item.get('step_id')}', "
                     f"so every later step is trivially empty. Check that the table/sample was loaded."
                 ),
-                suspicious_step_id=item["step_id"],
-                scope=item["scope"],
+                suspicious_step_id=item.get("step_id"),
+                scope=item.get("scope"),
                 evidence={"rows": 0},
                 suggested_fix="Load data into the table (or use a representative sample) before analysing.",
                 confidence="medium",
@@ -195,7 +232,7 @@ class GeneralAnomalyDetector(BaseBugDetector):
         return findings
 
     # 5) Complex aggregation & join workflow ---------------------------- #
-    def _check_complex_workflow(self, parsed_steps, step_trace) -> List[Dict[str, Any]]:
+    def _check_complex_workflow(self, parsed_steps, step_trace, db_connection=None) -> List[Dict[str, Any]]:
         """JOIN + GROUP BY / AGGREGATE inside the SAME scope (original check, scope-aware)."""
         parsed_list = self.as_dict_list(parsed_steps)
         parsed_by_id = {p.get("step_id"): p for p in parsed_list if p.get("step_id") is not None}
@@ -209,13 +246,19 @@ class GeneralAnomalyDetector(BaseBugDetector):
             step = self._merge(entry, parsed)
             category = self.classify_step(step)
             scope = str(step.get("scope") or "main")
-            info = scopes.setdefault(scope, {"join": None, "group": None})
+            info = scopes.setdefault(scope, {"join": None, "group": None, "joins": []})
+            if category == "JOIN":
+                info["joins"].append(step)
             if category == "JOIN" and info["join"] is None:
                 info["join"] = (index, entry.get("step_id"))
             elif category == "AGGREGATE" and info["group"] is None:
                 info["group"] = (index, entry.get("step_id"))
         for scope, info in scopes.items():
             if info["join"] and info["group"]:
+                # Proven safe: every joined table is unique on its join key, so no JOIN can
+                # multiply rows and the grain warning would only be noise.
+                if all(self.join_right_key_unique(j, db_connection) is True for j in info["joins"]):
+                    continue
                 return [self._finding(
                     info["group"][0],
                     bug_type="Complex Aggregation & Join Workflow",

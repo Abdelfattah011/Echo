@@ -326,6 +326,18 @@ class EchoEngineRunner:
             return "Data Type Conversion Error"
         return "Query Runtime Failure"
 
+    def _available_tables(self, limit=30):
+        """Names of the tables / views the script can use (best effort, never raises)."""
+        try:
+            rows = self.db.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
+                "ORDER BY table_name LIMIT " + str(int(limit))
+            ).fetchall()
+            return [str(r[0]) for r in rows]
+        except Exception:  # noqa: BLE001
+            return []
+
     def analyze_sql(self, query):
         """Convenience: parse + analyze in one call."""
         return self.analyze_query(query, parse_sql_to_steps(query, self.dialect))
@@ -361,6 +373,7 @@ class EchoEngineRunner:
             self._close_session()
 
         # Failed steps: syntax / blocked statements always; others only if no detector explained them.
+        available_tables = self._available_tables()
         explained = {b.get("suspicious_step_id") for b in bugs}
         reported_scopes = set()
         for entry in step_trace:
@@ -372,6 +385,19 @@ class EchoEngineRunner:
             reported_scopes.add(entry["scope"])
             if entry["step_id"] in explained:
                 continue
+            evidence = {"error_type": entry.get("error_type"),
+                        "statement_index": entry.get("statement_index")}
+            suggested = "Fix the statement text, or the table/column names and types it uses."
+            error_kind = (entry.get("error_type") or "").lower()
+            if available_tables and ("catalog" in error_kind or "binder" in error_kind):
+                evidence["available_tables"] = available_tables
+                suggested = (
+                    "A table or column does not exist. Read the database message in the description "
+                    "(it often says 'Did you mean ...'). Tables available here: "
+                    + ", ".join(available_tables)
+                    + ". If your table is not listed, create it in the script (CREATE TABLE ...; INSERT ...) "
+                    "before the query."
+                )
             bugs.append({
                 "bug_type": self._failure_bug_type(entry),
                 "severity": "High",
@@ -379,9 +405,8 @@ class EchoEngineRunner:
                 "suspicious_step_id": entry["step_id"],
                 "scope": entry["scope"],
                 "description": f"Step '{entry['step_id']}' failed: {entry.get('error')}",
-                "evidence": {"error_type": entry.get("error_type"),
-                             "statement_index": entry.get("statement_index")},
-                "suggested_fix": "Fix the statement text, or the table/column names and types it uses.",
+                "evidence": evidence,
+                "suggested_fix": suggested,
                 "detector": "EchoEngineRunner",
             })
 

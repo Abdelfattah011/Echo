@@ -19,6 +19,8 @@ Design
 * Every other statement becomes one step carrying the ORIGINAL text, plus optional
   ``alternative_queries`` the runner may try when DuckDB lacks the exact syntax
   (e.g. ``CREATE DATABASE x`` -> ``ATTACH ':memory:' AS x``).
+* If the analysis of one statement hits an unexpected error, that statement degrades to a
+  single plain step carrying its original text instead of crashing the whole script.
 """
 
 import re
@@ -40,6 +42,11 @@ SELECT_TYPES = _types("Select")
 SET_OPERATIONS = _types("Union", "Intersect", "Except")
 QUERY_TYPES = SELECT_TYPES + SET_OPERATIONS
 _NULL_REJECTING = _types("EQ", "NEQ", "GT", "GTE", "LT", "LTE", "Like", "ILike", "In", "Between")
+# Nodes that must never appear inside something we call "read-only".
+_SIDE_EFFECT_NODES = _types(
+    "Insert", "Update", "Delete", "Merge", "Create", "Drop", "Alter", "AlterTable",
+    "TruncateTable", "Copy", "Into",
+)
 
 _DDL_COMMANDS = {"CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME", "COMMENT"}
 _DML_COMMANDS = {"INSERT", "UPDATE", "DELETE", "MERGE", "COPY", "REPLACE"}
@@ -51,6 +58,9 @@ _ADMIN_NODES = (
     "Export", "Install", "LoadData",
 )
 _READ_ONLY_ADMIN_NODES = ("Show", "Describe", "Summarize", "Explain")
+
+# Join kinds that are not plain INNER / OUTER joins and must keep their own SQL text.
+_SPECIAL_JOIN_KINDS = ("SEMI", "ANTI", "POSITIONAL", "ASOF")
 
 
 # --------------------------------------------------------------------------- #
@@ -126,16 +136,17 @@ def _object_name(node):
         found = _object_name(this_node)
         if found:
             return found
-    # Fallback أخير: لو الـ node له نص/sql ومش فاضي
+    # Last resort: use the node's SQL text when it is not just a bare keyword.
     sql_val = getattr(node, "sql", None)
     if callable(sql_val):
         try:
             text = str(sql_val()).strip().strip('"').strip("`")
             if text and text.upper() not in ("TABLE", "VIEW", "INDEX", "DATABASE", "SCHEMA"):
                 return text
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return None
+
 
 def _command_verb(node):
     verb = node.this if isinstance(node.this, str) else getattr(node, "name", "")
@@ -159,13 +170,8 @@ def _is_blank(chunk):
     return not _COMMENTS.sub("", chunk).strip()
 
 
-def split_statements(sql):
-    """Split a script on top-level semicolons (and T-SQL ``GO`` lines).
-
-    Semicolons inside '...', "...", `...`, $$...$$, -- comments and /* */ comments are
-    ignored. Comment-only / empty pieces are dropped. Unterminated quotes simply run to
-    the end of the script, so the broken statement is reported as a syntax error later.
-    """
+def _top_level_pieces(sql):
+    """(start, end) offsets of the pieces between top-level semicolons (quote / comment aware)."""
     pieces, start, i, n = [], 0, 0, len(sql)
     while i < n:
         ch = sql[i]
@@ -194,19 +200,130 @@ def split_statements(sql):
             else:
                 i += 1
         elif ch == ";":
-            pieces.append(sql[start:i])
+            pieces.append((start, i))
             start = i + 1
             i += 1
         else:
             i += 1
-    pieces.append(sql[start:])
+    pieces.append((start, n))
+    return pieces
 
-    statements = []
-    for piece in pieces:
-        for part in _GO_LINE.split(piece):
-            if part.strip() and not _is_blank(part):
-                statements.append(part.strip())
-    return statements
+
+def split_statement_spans(sql):
+    """``(start, end)`` offsets of every statement of a script, in ``sql`` itself.
+
+    Same statements as :func:`split_statements` (``sql[start:end]`` equals the statement text),
+    but with positions, so a caller can rewrite ONE statement and leave every other byte of the
+    script (separators, comments between statements, spacing) exactly as the user wrote it.
+    """
+    if not isinstance(sql, str):
+        return []
+    spans = []
+    for piece_start, piece_end in _top_level_pieces(sql):
+        piece = sql[piece_start:piece_end]
+        parts, cursor = [], 0
+        for match in _GO_LINE.finditer(piece):
+            parts.append((cursor, match.start()))
+            cursor = match.end()
+        parts.append((cursor, len(piece)))
+        for part_start, part_end in parts:
+            part = piece[part_start:part_end]
+            if not part.strip() or _is_blank(part):
+                continue
+            lead = len(part) - len(part.lstrip())
+            trail = len(part) - len(part.rstrip())
+            spans.append((piece_start + part_start + lead, piece_start + part_end - trail))
+    return spans
+
+
+def split_statements(sql):
+    """Split a script on top-level semicolons (and T-SQL ``GO`` lines).
+
+    Semicolons inside '...', "...", `...`, $$...$$, -- comments and /* */ comments are
+    ignored. Comment-only / empty pieces are dropped. Unterminated quotes simply run to
+    the end of the script, so the broken statement is reported as a syntax error later.
+    Non-string input yields an empty list.
+    """
+    if not isinstance(sql, str):
+        return []
+    return [sql[start:end] for start, end in split_statement_spans(sql)]
+
+
+# --------------------------------------------------------------------------- #
+# Input normalisation (advisory headers written by ECHO itself must never re-enter the engine)
+# --------------------------------------------------------------------------- #
+_ECHO_LINE = re.compile(r"^[ \t]*--[ \t]*ECHO\b.*$")
+_LEGACY_ECHO_HEADER = re.compile(
+    r"^[ \t]*--[ \t]*((?-i:ECHO)\b|Suggested grain-safe rewrite|Advisory SQL for|Recommendation:|"
+    r"Syntax error detected|Fix the SQL syntax first)",
+    re.IGNORECASE,
+)
+
+
+def strip_echo_headers(sql):
+    """Remove the comment lines ECHO itself adds to advisory SQL.
+
+    * every whole-line ``-- ECHO ...`` comment is removed wherever it is;
+    * legacy ECHO header lines (older advisory formats) are removed only at the very top.
+
+    Idempotent, and a script without ECHO comments is returned unchanged. Comments inside a
+    string literal or a block comment are never touched.
+    """
+    if not isinstance(sql, str):
+        return ""
+    lines = sql.split("\n")
+    kept, in_block, in_quote = [], False, None
+    for line in lines:
+        starts_inside_literal = in_block or in_quote is not None
+        if not starts_inside_literal and _ECHO_LINE.match(line):
+            continue
+        kept.append(line)
+        i, n = 0, len(line)
+        while i < n:
+            ch = line[i]
+            if in_block:
+                end = line.find("*/", i)
+                if end == -1:
+                    i = n
+                else:
+                    in_block, i = False, end + 2
+            elif in_quote:
+                if ch == in_quote:
+                    if i + 1 < n and line[i + 1] == in_quote:
+                        i += 2
+                        continue
+                    in_quote = None
+                i += 1
+            elif ch == "-" and line[i:i + 2] == "--":
+                i = n
+            elif ch == "/" and line[i:i + 2] == "/*":
+                in_block, i = True, i + 2
+            elif ch in ("'", '"', "`"):
+                in_quote, i = ch, i + 1
+            else:
+                i += 1
+    while kept and (not kept[0].strip() or _LEGACY_ECHO_HEADER.match(kept[0])):
+        kept.pop(0)
+    return "\n".join(kept)
+
+
+def normalize_sql_input(sql):
+    """Canonical text for the engine: LF line endings, no ECHO advisory comments.
+
+    Returns ``(text, notes)``. ``notes`` lists what was changed (empty when nothing was).
+    The user's own SQL (and comments) is never altered beyond that.
+    """
+    if not isinstance(sql, str):
+        return "", []
+    notes = []
+    text = sql
+    if "\r" in text:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+    stripped = strip_echo_headers(text)
+    if stripped != text:
+        notes.append("Removed ECHO advisory comment lines from the input (they are not part of your SQL).")
+        text = stripped
+    return text, notes
 
 
 # --------------------------------------------------------------------------- #
@@ -225,7 +342,8 @@ def _parse_statement(chunk, dialects):
         try:
             node = sqlglot.parse_one(chunk, read=dialect)
         except Exception as exc:  # noqa: BLE001
-            first_error = first_error or exc
+            if first_error is None:
+                first_error = exc
             continue
         if node is not None:
             return node.unnest(), dialect, None
@@ -358,10 +476,50 @@ def _alternatives(node, info, original_sql, parsed_dialect, write_dialect):
 
 
 # --------------------------------------------------------------------------- #
+# Read-only guard helpers
+# --------------------------------------------------------------------------- #
+_EXPLAIN_HEAD = re.compile(r"(?is)^\s*EXPLAIN\b")
+_EXPLAIN_PREFIX = re.compile(
+    r"(?is)^\s*EXPLAIN\b\s*"
+    r"(?:\((?:[^()]|\([^()]*\))*\)\s*|(?:ANALYZE|ANALYSE|VERBOSE)\b\s*|FORMAT\s+\w+\s*)*"
+)
+
+
+def _query_has_side_effects(node):
+    """True when a query-shaped node writes data (SELECT ... INTO, data-modifying CTEs, ...)."""
+    for kind in _SIDE_EFFECT_NODES:
+        try:
+            if node.find(kind) is not None:
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def _explain_target_is_read_only(chunk, dialect):
+    """``EXPLAIN ANALYZE <DML>`` really executes the DML: only allow EXPLAIN of read-only queries."""
+    match = _EXPLAIN_PREFIX.match(chunk)
+    if not match:
+        return False
+    tail = chunk[match.end():].strip()
+    if not tail:
+        return True
+    node, _, _ = _parse_statement(tail, _dialect_chain(dialect, FALLBACK_DIALECTS))
+    if node is None:
+        return False
+    info = _classify(node)
+    if not info or not info["read_only"]:
+        return False
+    return not (info["kind"] == "SELECT" and _query_has_side_effects(node))
+
+
+# --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
 def check_query_is_read_only(sql, dialect=DEFAULT_DIALECT):
     """Return ``(ok, reason)``: True only for one read-only statement (SELECT / SHOW / ...)."""
+    if not isinstance(sql, str) or not sql.strip():
+        return False, "Exactly one SQL statement is allowed."
     chunks = split_statements(sql)
     if len(chunks) != 1:
         return False, "Exactly one SQL statement is allowed."
@@ -369,9 +527,13 @@ def check_query_is_read_only(sql, dialect=DEFAULT_DIALECT):
     if node is None:
         return False, f"Invalid SQL syntax: {error}"
     info = _classify(node)
-    if info and info["read_only"]:
-        return True, ""
-    return False, "Only read-only statements are allowed."
+    if not (info and info["read_only"]):
+        return False, "Only read-only statements are allowed."
+    if info["kind"] == "SELECT" and _query_has_side_effects(node):
+        return False, "Only read-only statements are allowed (the query modifies data)."
+    if _EXPLAIN_HEAD.match(chunks[0]) and not _explain_target_is_read_only(chunks[0], dialect):
+        return False, "Only read-only statements are allowed (EXPLAIN of a non-read-only statement)."
+    return True, ""
 
 
 def parse_sql_to_steps(
@@ -475,7 +637,37 @@ class _StepBuilder:
 
     # ---- statements ------------------------------------------------------- #
     def add_statement(self, node, sql, info, parsed_dialect):
+        """Analyse one statement; on any unexpected error degrade to ONE plain step."""
         self.statement_kind = info["kind"]
+        start = len(self.steps)
+        try:
+            self._add_statement(node, sql, info, parsed_dialect)
+        except Exception:  # noqa: BLE001 - never let one statement break the whole script
+            del self.steps[start:]
+            self._counter = len(self.steps)
+            self.recursive = False
+            self.statement_kind = info["kind"]
+            self._plain_step(node, sql, info, parsed_dialect, analysed=False)
+
+    def _plain_step(self, node, sql, info, parsed_dialect, analysed=True):
+        extra = {}
+        if info["kind"] == "SELECT":
+            body = sql.strip().rstrip(";").strip()
+            extra["count_query"] = f"SELECT COUNT(*) FROM (\n{body}\n) AS _echo_q"
+        return self._add(
+            step_type=info["step_type"],
+            name=info["kind"].lower(),
+            scope=self.main_scope,
+            description=f"Execute {info['kind'].replace('_', ' ')} statement",
+            sql_snippet=sql,
+            executable_query=sql,
+            read_only=info["read_only"],
+            parsed_dialect=parsed_dialect,
+            alternative_queries=_alternatives(node, info, sql, parsed_dialect, self.dialect),
+            **extra,
+        )
+
+    def _add_statement(self, node, sql, info, parsed_dialect):
         if info["kind"] == "SELECT":
             self.analyze(node, self.main_scope, [])
             return
@@ -492,17 +684,7 @@ class _StepBuilder:
                 self.analyze(source, f"{self.main_scope}/source", ctes)
                 self.statement_kind = info["kind"]
 
-        self._add(
-            step_type=info["step_type"],
-            name=info["kind"].lower(),
-            scope=self.main_scope,
-            description=f"Execute {info['kind'].replace('_', ' ')} statement",
-            sql_snippet=sql,
-            executable_query=sql,
-            read_only=info["read_only"],
-            parsed_dialect=parsed_dialect,
-            alternative_queries=_alternatives(node, info, sql, parsed_dialect, self.dialect),
-        )
+        self._plain_step(node, sql, info, parsed_dialect)
 
     # ---- SELECT entry points ---------------------------------------------- #
     def analyze(self, node, scope, ctes):
@@ -590,8 +772,9 @@ class _StepBuilder:
         has_aggregate = bool(measures) or self._has_aggregate(select)
         primary = next((m for m in measures if m["func"] == "SUM"), None)
         measure_expr = primary["expression"] if primary else None
+        measure_tables = tuple(primary["tables"]) if primary else ()
 
-        if from_node is None:  # e.g. SELECT 1
+        if from_node is None or from_node.this is None:  # e.g. SELECT 1
             sql = self._sql(_without_with(select))
             self._add(
                 step_type="QUERY",
@@ -610,10 +793,12 @@ class _StepBuilder:
         base_info = self._relation_info(base)
         alias_map = {base_info["alias"]: base_info}
         from_sql = self._sql(base)
+        base_label = base_info["alias"] or base_info["table"] or "subquery"
         self._flow_step(
             "BASE_TABLE", base_info["alias"] or base_info["table"] or "base",
-            f"Load base relation '{base_info['alias'] or base_info['table']}'",
+            f"Load base relation '{base_label}'",
             self._sql(from_node), scope, prefix, from_sql, measure_expr, alias_map,
+            measure_tables=measure_tables,
         )
 
         # ---- joins (cumulative) --------------------------------------------- #
@@ -631,13 +816,16 @@ class _StepBuilder:
             method = (join.method or "").upper()
 
             explicit_cross = kind == "CROSS"
-            implicit_cross = (not explicit_cross and on is None and not using and not method
+            # Only a bare comma / "JOIN t" without ON is an implicit cross join. Joins that carry
+            # their own kind (POSITIONAL, ASOF, SEMI, ...) keep their original SQL untouched.
+            implicit_cross = (not explicit_cross and not side and not kind and on is None
+                              and not using and not method
                               and isinstance(target, (exp.Table, exp.Subquery)))
             if explicit_cross or implicit_cross:
                 join_type = "CROSS"
             elif side:
                 join_type = side
-            elif kind in ("SEMI", "ANTI"):
+            elif kind in _SPECIAL_JOIN_KINDS:
                 join_type = kind
             else:
                 join_type = "INNER"
@@ -669,11 +857,12 @@ class _StepBuilder:
                 "JOIN", join_alias or info["table"] or "join",
                 f"Perform {join_type} JOIN with '{info['table'] or join_alias}'",
                 self._sql(join), scope, prefix, from_sql, measure_expr, alias_map,
+                measure_tables=measure_tables,
                 join_details=details,
             )
 
         # ---- where ---------------------------------------------------------- #
-        if where is not None:
+        if where is not None and where.this is not None:
             conjuncts = [
                 {
                     "sql": self._sql(c),
@@ -686,6 +875,7 @@ class _StepBuilder:
                 "WHERE", "filter", "Filter rows with the WHERE clause",
                 self._sql(where), scope, prefix, from_sql, measure_expr, alias_map,
                 where_sql=self._sql(where.this),
+                measure_tables=measure_tables,
                 where_details={"condition": self._sql(where.this), "conjuncts": conjuncts},
             )
 
@@ -722,8 +912,13 @@ class _StepBuilder:
 
     # ---- builders --------------------------------------------------------- #
     def _flow_step(self, step_type, name, description, snippet, scope, prefix, from_sql,
-                   measure_expr, alias_map, where_sql=None, **extra):
+                   measure_expr, alias_map, where_sql=None, measure_tables=(), **extra):
         tail = f" WHERE {where_sql}" if where_sql else ""
+        # The SUM() argument may reference an alias that is joined LATER: only measure the
+        # running total from the step where every table it uses is already in scope.
+        measurable = bool(measure_expr) and all(
+            (not table) or (table in alias_map) for table in measure_tables
+        )
         return self._add(
             step_type=step_type,
             name=name,
@@ -733,7 +928,7 @@ class _StepBuilder:
             executable_query=f"{prefix}SELECT * FROM {from_sql}{tail}",
             count_query=f"{prefix}SELECT COUNT(*) FROM {from_sql}{tail}",
             measure_query=(
-                f"{prefix}SELECT SUM({measure_expr}) FROM {from_sql}{tail}" if measure_expr else None
+                f"{prefix}SELECT SUM({measure_expr}) FROM {from_sql}{tail}" if measurable else None
             ),
             with_prefix=prefix,
             alias_map=dict(alias_map),
@@ -770,7 +965,9 @@ class _StepBuilder:
             if (isinstance(cond, exp.EQ) and isinstance(cond.this, exp.Column)
                     and isinstance(cond.expression, exp.Column)):
                 a, b = cond.this, cond.expression
-                a_right, b_right = a.table == join_alias, b.table == join_alias
+                # An empty alias (un-aliased sub-query) must never match unqualified columns.
+                a_right = bool(join_alias) and a.table == join_alias
+                b_right = bool(join_alias) and b.table == join_alias
                 if a_right and not b_right:
                     left, right = b, a
                 elif b_right and not a_right:

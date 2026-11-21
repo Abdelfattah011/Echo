@@ -1,7 +1,8 @@
+import logging
 from typing import Any, Dict, List, Optional
-
 from Engine.detectors.base_detector import SEVERITY_RANK, BaseBugDetector
 
+logger = logging.getLogger(__name__)
 
 class FanOutDetector(BaseBugDetector):
     """Bulletproof JOIN Fan-out Detector.
@@ -84,21 +85,7 @@ class FanOutDetector(BaseBugDetector):
     def _build_finding(self, item, aggregates, conn) -> Optional[Dict[str, Any]]:
         step = item["step"]
         details = step.get("join_details") or {}
-        duplicate_key_details = []
-        pairs = details.get("key_pairs") or []
-        right_columns = list(dict.fromkeys(
-        pair["right_column"]
-        for pair in pairs
-        if pair.get("right_column")
-        ))
 
-        if right_columns:
-          duplicate_key_details = self._get_duplicate_key_details(
-            conn=conn,
-            prefix=step.get("with_prefix", ""),
-            relation_sql=details.get("target_relation_sql"),
-            key_columns=right_columns,
-        )
         cartesian = bool(details.get("implicit_cross") or details.get("explicit_cross")
                          or details.get("links_both_sides") is False)
         if self.DEFER_CARTESIAN and cartesian:
@@ -106,6 +93,21 @@ class FanOutDetector(BaseBugDetector):
 
         before, after, ratio, step_id = item["prev_rows"], item["rows"], item["ratio"], item["step_id"]
         proof = self._prove_with_db(step, details, conn)
+
+        duplicate_key_details = []
+
+        if proof.get("confirmed"):
+            pairs = details.get("key_pairs") or []
+            right_columns = list(dict.fromkeys(
+                pair["right_column"] for pair in pairs if pair.get("right_column")
+            ))
+            duplicate_key_details = self._get_duplicate_key_details(
+                conn=conn,
+                prefix=step.get("with_prefix") or "",
+                relation_sql=details.get("target_relation_sql"),
+                key_columns=right_columns,
+            )
+        
         impact = self._aggregate_impact(step, details, aggregates.get(item["scope"]), proof, conn)
         if impact == "benign" and not self.REPORT_LIKELY_INTENTIONAL:
             return None
@@ -264,10 +266,8 @@ class FanOutDetector(BaseBugDetector):
             # Duplicating rows alone does not change MIN or MAX.
             if func in {"MIN", "MAX"}:
                 continue
-            # These aggregate functions can be affected by duplicated rows.
-            if func in {"SUM", "AVG", "COUNT"}:
-                relevant_measures.append(measure)
-        # No aggregate in this scope is affected by row duplication alone.
+            relevant_measures.append(measure)
+        # Every aggregate here is MIN/MAX (or distinct-only): duplicates cannot change them.
         if not relevant_measures:
             return "benign"
 
@@ -292,8 +292,6 @@ class FanOutDetector(BaseBugDetector):
                 return "impacted"
             return "unknown"
         return "unknown"
-
- ##   
     
     def _get_duplicate_key_details(self, conn, prefix, relation_sql, key_columns):
         """Return repeated join-key values and their counts."""
@@ -309,7 +307,7 @@ class FanOutDetector(BaseBugDetector):
             SELECT
                 {cols},
                 COUNT(*) AS occurrence_count
-            FROM ({relation_sql}) AS _echo_duplicates
+            FROM {relation_sql} AS _echo_duplicates
             WHERE {not_null}
             GROUP BY {cols}
             HAVING COUNT(*) > 1
@@ -322,7 +320,7 @@ class FanOutDetector(BaseBugDetector):
             rows = cursor.fetchall()
             names = [desc[0] for desc in cursor.description]
             return [dict(zip(names, row)) for row in rows]
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - best-effort evidence
+            logger.debug("duplicate key lookup failed: %s", exc)
             return []
-
     

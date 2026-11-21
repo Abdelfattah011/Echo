@@ -590,6 +590,7 @@ class _StepBuilder:
         has_aggregate = bool(measures) or self._has_aggregate(select)
         primary = next((m for m in measures if m["func"] == "SUM"), None)
         measure_expr = primary["expression"] if primary else None
+        measure_tables = set(primary.get("tables") or []) if primary else set()
 
         if from_node is None:  # e.g. SELECT 1
             sql = self._sql(_without_with(select))
@@ -610,10 +611,18 @@ class _StepBuilder:
         base_info = self._relation_info(base)
         alias_map = {base_info["alias"]: base_info}
         from_sql = self._sql(base)
+        base_measure_expr = (
+            measure_expr
+            if measure_expr and measure_tables.issubset(set(alias_map.keys()))
+            else None
+        )
+        current_measure_expr = base_measure_expr
+
         self._flow_step(
             "BASE_TABLE", base_info["alias"] or base_info["table"] or "base",
             f"Load base relation '{base_info['alias'] or base_info['table']}'",
-            self._sql(from_node), scope, prefix, from_sql, measure_expr, alias_map,
+            self._sql(from_node), scope, prefix, from_sql,
+            base_measure_expr, alias_map,
         )
 
         # ---- joins (cumulative) --------------------------------------------- #
@@ -624,6 +633,11 @@ class _StepBuilder:
             left_aliases = list(alias_map.keys())
             alias_map[join_alias] = info
 
+            current_measure_expr = (
+                measure_expr
+                if measure_expr and measure_tables.issubset(set(alias_map.keys()))
+                else None
+            )
             on = join.args.get("on")
             using = join.args.get("using")
             side = (join.side or "").upper()
@@ -668,7 +682,7 @@ class _StepBuilder:
             self._flow_step(
                 "JOIN", join_alias or info["table"] or "join",
                 f"Perform {join_type} JOIN with '{info['table'] or join_alias}'",
-                self._sql(join), scope, prefix, from_sql, measure_expr, alias_map,
+                self._sql(join), scope, prefix, from_sql, current_measure_expr, alias_map,
                 join_details=details,
             )
 
@@ -684,7 +698,9 @@ class _StepBuilder:
             ]
             self._flow_step(
                 "WHERE", "filter", "Filter rows with the WHERE clause",
-                self._sql(where), scope, prefix, from_sql, measure_expr, alias_map,
+                self._sql(where), scope, prefix, from_sql,
+                current_measure_expr if joins else base_measure_expr,
+                alias_map,
                 where_sql=self._sql(where.this),
                 where_details={"condition": self._sql(where.this), "conjuncts": conjuncts},
             )

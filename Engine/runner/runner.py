@@ -152,6 +152,7 @@ class EchoEngineRunner:
             "query": sql,
             "row_count": None,
             "sum_value": None,
+            "measure_value": None,
             "columns_metrics": {},
             "execution_time_ms": 0.0,
             "status": "success",
@@ -200,8 +201,10 @@ class EchoEngineRunner:
         if measure_sql:
             try:
                 value = session.execute(measure_sql).fetchone()[0]
-                entry["sum_value"] = float(value) if value is not None else None
+                entry["measure_value"] = float(value) if value is not None else None
+                entry["sum_value"] = entry["measure_value"]
             except Exception:  # noqa: BLE001 - measure columns may not exist yet at this step
+                entry["measure_value"] = None
                 entry["sum_value"] = None
 
         if (self.collect_column_metrics and sql and entry["row_count"]
@@ -210,8 +213,6 @@ class EchoEngineRunner:
                 cursor = session.execute(sql)
                 columns = [c[0] for c in cursor.description] if cursor.description else []
                 entry["columns_metrics"] = self._column_metrics(columns, cursor.fetchall())
-                if entry["sum_value"] is None and entry["columns_metrics"]:
-                    entry["sum_value"] = next(iter(entry["columns_metrics"].values()))
             except Exception:  # noqa: BLE001 - metrics are best-effort
                 entry["columns_metrics"] = {}
         elif entry["row_count"] and entry["row_count"] > self.metrics_row_limit:

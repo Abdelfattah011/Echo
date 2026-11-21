@@ -52,8 +52,15 @@ class FanOutDetector(BaseBugDetector):
 
         aggregates = {}
         for parsed in self.as_dict_list(parsed_steps):
-            if self.classify_step(parsed) == "AGGREGATE" and parsed.get("measures"):
-                aggregates.setdefault(str(parsed.get("scope") or "main"), parsed)
+            if self.classify_step(parsed) != "AGGREGATE":
+                continue
+            measures = parsed.get("measures") or []
+            if not measures:
+                continue
+            scope = str(parsed.get("scope") or "main")
+            if scope not in aggregates:
+                aggregates[scope] = {"measures": []}
+            aggregates[scope]["measures"].extend(measures)
 
         findings = [f for f in (self._build_finding(c, aggregates, db_connection) for c in candidates) if f]
         if not findings:
@@ -77,6 +84,21 @@ class FanOutDetector(BaseBugDetector):
     def _build_finding(self, item, aggregates, conn) -> Optional[Dict[str, Any]]:
         step = item["step"]
         details = step.get("join_details") or {}
+        duplicate_key_details = []
+        pairs = details.get("key_pairs") or []
+        right_columns = list(dict.fromkeys(
+        pair["right_column"]
+        for pair in pairs
+        if pair.get("right_column")
+        ))
+
+        if right_columns:
+          duplicate_key_details = self._get_duplicate_key_details(
+            conn=conn,
+            prefix=step.get("with_prefix", ""),
+            relation_sql=details.get("target_relation_sql"),
+            key_columns=right_columns,
+        )
         cartesian = bool(details.get("implicit_cross") or details.get("explicit_cross")
                          or details.get("links_both_sides") is False)
         if self.DEFER_CARTESIAN and cartesian:
@@ -94,21 +116,27 @@ class FanOutDetector(BaseBugDetector):
         elif impact == "benign":
             severity = "Low"
 
-        description = (
-            f"Critical row inflation detected at '{step_id}'. "
-            f"Row count surged from {before:,} to {after:,} "
-            f"(x{ratio} multiplier increase). This strongly indicates an unintended "
-            f"one-to-many data duplication or a missing/flawed ON condition in the JOIN operation."
-        )
-        if proof.get("confirmed"):
-            description += (
-                f" Confirmed: {proof['table']}.{proof['key_text']} is not unique "
-                f"({proof['distinct_keys']:,} distinct keys across {proof['key_rows']:,} rows)."
-            )
         if impact == "benign":
-            description += " All aggregates sit on the 'many' side of the join, so this expansion is likely intentional."
+          description = (
+            f"Expected one-to-many expansion detected at '{step_id}'. "
+            f"Row count increased from {before} to {after} "
+            f"(x{ratio:.2f}). The available aggregation metadata "
+            "suggests this expansion is likely intentional."
+            )
+
         elif impact == "impacted":
-            description += " The multiplied rows feed an aggregate, so totals are affected."
+          description = (
+            f"Potentially harmful JOIN fan-out detected at '{step_id}'. "
+            f"Row count increased from {before} to {after} "
+            f"(x{ratio:.2f}). The expansion may inflate aggregate results."
+            )
+
+        else:
+          description = (
+            f"Possible JOIN fan-out detected at '{step_id}'. "
+            f"Row count increased from {before} to {after} "
+            f"(x{ratio:.2f}). Further investigation is recommended."
+            )
 
         evidence = {
             "join_step": step_id,
@@ -121,22 +149,38 @@ class FanOutDetector(BaseBugDetector):
             "confirmed": bool(proof.get("confirmed")),
             "likely_intentional": impact == "benign",
             "cartesian_suspected": cartesian,
+            "duplicate_key_details": duplicate_key_details,
         }
         if proof.get("stats"):
             evidence["right_key_stats"] = proof["stats"]
 
         table = proof.get("table") or details.get("target_table") or "the joined table"
+        if impact == "benign":
+            suggested_fix = (
+                "No fix is required if this one-to-many expansion is expected. "
+                "Verify that the aggregation is performed at the intended level."
+            )
+
+        elif impact == "impacted":
+            suggested_fix = (
+                f"Review the JOIN with {table}. Check whether the join key should be unique. "
+                "If multiple rows per key are expected, pre-aggregate the data before joining "
+                "or aggregate at the correct level to avoid inflated totals."
+            )
+
+        else:
+            suggested_fix = (
+                f"Review the JOIN condition with {table}. Check whether duplicate keys or "
+                "an incomplete ON condition are causing unexpected row multiplication."
+            )
+
         report = self.report(
             bug_type="Possible JOIN Fan-out",
             severity=severity,
             description=description,
             suspicious_step_id=step_id,
             evidence=evidence,
-            suggested_fix=(
-                f"Make the join key of {table} unique before the JOIN (keep one row per key, e.g. "
-                "ROW_NUMBER() / DISTINCT ON, or pre-aggregate it), or confirm the expansion is "
-                "intended and aggregate on the correct side."
-            ),
+            suggested_fix=suggested_fix,
             scope=item["scope"],
             confidence="high" if proof.get("confirmed") else "medium",
         )
@@ -208,19 +252,77 @@ class FanOutDetector(BaseBugDetector):
         return None if stats is None else stats["duplicate_rows"] > 0
 
     def _aggregate_impact(self, step, details, aggregate, proof, conn) -> str:
-        """'impacted' | 'benign' | 'unknown' - do the aggregates of this scope use the multiplied rows?"""
+        """Classify whether JOIN row multiplication can affect aggregates."""
         measures = (aggregate or {}).get("measures") or []
         if not measures:
             return "unknown"
-        owners = set()
-        for measure in measures:
-            owners |= set(measure.get("tables") or [""])
         left_aliases = set(details.get("left_aliases") or [])
-        if owners & (left_aliases | {""}):
-            return "impacted"  # a left-side (or unknown) column is summed over duplicated rows
-        if details.get("target_alias") in owners:
+        target_alias = details.get("target_alias")
+        relevant_measures = []
+        for measure in measures:
+            func = str(measure.get("func") or "").upper()
+            # Duplicating rows alone does not change MIN or MAX.
+            if func in {"MIN", "MAX"}:
+                continue
+            # These aggregate functions can be affected by duplicated rows.
+            if func in {"SUM", "AVG", "COUNT"}:
+                relevant_measures.append(measure)
+        # No aggregate in this scope is affected by row duplication alone.
+        if not relevant_measures:
+            return "benign"
+
+        owners = set()
+        for measure in relevant_measures:
+            tables = measure.get("tables")
+            if not tables:
+                return "unknown"
+            owners.update(tables)
+
+        # A measure using a left-side table can be multiplied by the JOIN.
+        if owners & left_aliases:
+            return "impacted"
+        # A measure using the right-side table needs additional checks.
+        if target_alias and target_alias in owners:
             if not proof.get("confirmed"):
                 return "unknown"
             left_dup = self._left_key_duplicated(step, details, conn)
-            return "benign" if left_dup is False else "impacted"  # many-to-many or unknown stays alarming
+            if left_dup is False:
+                return "benign"
+            elif left_dup is True:
+                return "impacted"
+            return "unknown"
         return "unknown"
+
+ ##   
+    
+    def _get_duplicate_key_details(self, conn, prefix, relation_sql, key_columns):
+        """Return repeated join-key values and their counts."""
+        if conn is None or not relation_sql or not key_columns:
+            return []
+
+        cols = ", ".join(self._q(c) for c in key_columns)
+        not_null = " AND ".join(
+            f"{self._q(c)} IS NOT NULL" for c in key_columns
+        )
+        query = f"""
+            {prefix or ""}
+            SELECT
+                {cols},
+                COUNT(*) AS occurrence_count
+            FROM ({relation_sql}) AS _echo_duplicates
+            WHERE {not_null}
+            GROUP BY {cols}
+            HAVING COUNT(*) > 1
+            ORDER BY occurrence_count DESC
+            LIMIT 10
+        """
+
+        try:
+            cursor = conn.execute(query)
+            rows = cursor.fetchall()
+            names = [desc[0] for desc in cursor.description]
+            return [dict(zip(names, row)) for row in rows]
+        except Exception:
+            return []
+
+    

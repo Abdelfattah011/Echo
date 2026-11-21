@@ -209,4 +209,4 @@ def generate_benchmark_data(db_path: str = "echo_benchmark.duckdb") -> None:
 
 if __name__ == "__main__":
 >>>>>>> 11cfc2f119062be38a47a4b5278be27c2172ba14
-  generate_benchmark_data()
+generate_benchmark_data()

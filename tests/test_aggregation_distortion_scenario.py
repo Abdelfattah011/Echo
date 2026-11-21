@@ -23,17 +23,30 @@ conn.execute("""
     );
 """)
 
+conn.execute("""
+    CREATE TABLE customer_tags (
+        customer_id INT,
+        tag VARCHAR
+    );
+""")
+
 # إدخال بيانات: عميل واحد (ID: 1) ليه 3 معاملات ضخمة
 conn.execute("INSERT INTO customers VALUES (1, 'VIP');")
 conn.execute("INSERT INTO transactions VALUES (10, 1, 500), (11, 1, 300), (12, 1, 200);")
+conn.execute("INSERT INTO customer_tags VALUES (1, 'VIP'), (1, 'Premium');")
 
 print("✅ Aggregation distortion test tables created in DuckDB.")
 
 # 3. كويري فيها تشوه في التجميع (تجميع مباشر بعد JOIN بيؤدي لتكرار الحسابات الخاطئة)
 distortion_query = """
-    SELECT c.customer_tier, SUM(t.amount) as total_spent
+    SELECT
+        c.customer_tier,
+        SUM(t.amount) AS total_spent
     FROM customers c
-    JOIN transactions t ON c.customer_id = t.customer_id
+    JOIN transactions t
+        ON c.customer_id = t.customer_id
+    JOIN customer_tags ct
+        ON c.customer_id = ct.customer_id
     GROUP BY c.customer_tier
 """
 

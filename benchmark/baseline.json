@@ -1,0 +1,98 @@
+{
+  "full": {
+    "total_cases": 21,
+    "overall_detection_rate": 0.6,
+    "false_positives": 0,
+    "per_type": {
+      "join_fanout": {
+        "title": "JOIN Fan-out",
+        "total": 3,
+        "caught": 3,
+        "detection_rate": 1.0,
+        "missed": []
+      },
+      "inflated_totals": {
+        "title": "Inflated Totals",
+        "total": 3,
+        "caught": 3,
+        "detection_rate": 1.0,
+        "missed": []
+      },
+      "left_join_row_loss": {
+        "title": "Lost Rows in a LEFT JOIN",
+        "total": 3,
+        "caught": 0,
+        "detection_rate": 0.0,
+        "missed": [
+          "leftjoin_01",
+          "leftjoin_02",
+          "leftjoin_03"
+        ]
+      },
+      "null_join_keys": {
+        "title": "NULL Join Keys",
+        "total": 3,
+        "caught": 0,
+        "detection_rate": 0.0,
+        "missed": [
+          "nullkey_01",
+          "nullkey_02",
+          "nullkey_03"
+        ]
+      },
+      "key_type_mismatch": {
+        "title": "Key Type Mismatch",
+        "total": 3,
+        "caught": 3,
+        "detection_rate": 1.0,
+        "missed": []
+      }
+    }
+  },
+  "quick": {
+    "total_cases": 7,
+    "overall_detection_rate": 0.6,
+    "false_positives": 0,
+    "per_type": {
+      "join_fanout": {
+        "title": "JOIN Fan-out",
+        "total": 1,
+        "caught": 1,
+        "detection_rate": 1.0,
+        "missed": []
+      },
+      "inflated_totals": {
+        "title": "Inflated Totals",
+        "total": 1,
+        "caught": 1,
+        "detection_rate": 1.0,
+        "missed": []
+      },
+      "left_join_row_loss": {
+        "title": "Lost Rows in a LEFT JOIN",
+        "total": 1,
+        "caught": 0,
+        "detection_rate": 0.0,
+        "missed": [
+          "leftjoin_01"
+        ]
+      },
+      "null_join_keys": {
+        "title": "NULL Join Keys",
+        "total": 1,
+        "caught": 0,
+        "detection_rate": 0.0,
+        "missed": [
+          "nullkey_01"
+        ]
+      },
+      "key_type_mismatch": {
+        "title": "Key Type Mismatch",
+        "total": 1,
+        "caught": 1,
+        "detection_rate": 1.0,
+        "missed": []
+      }
+    }
+  }
+}

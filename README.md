@@ -181,6 +181,26 @@ Every run of ECHO is saved. dbt turns the raw logs into clean tables, and then i
 
 ---
 
+## Offline explanations with Ollama
+
+ECHO's code finds the bug, writes the fix and proves it. The LLM only puts those facts into plain words;
+every answer is checked against the facts (numbers, names, severity, verdict, "fix applied") and replaced by the
+deterministic text if anything does not match, or if Ollama is missing, slow or down.
+
+1. Install Ollama (https://ollama.com) and start it (`ollama serve`, or the desktop app).
+2. Pull a model: `ollama pull llama3.2` (or `ollama pull qwen2.5-coder:7b`).
+3. Configure ECHO: `cp .env.example .env` (the defaults already point to `http://localhost:11434/v1`).
+4. Run: `uvicorn api.main:app --reload` and `streamlit run dashboard/app.py`.
+
+In the dashboard sidebar, **Explainer (local Ollama)** lets you pick the mode (Auto / Ollama / Deterministic only),
+the base URL and the model, and **Check connection** calls `/api/tags` to show whether the server is up and the
+model is installed. The explanation card shows `LLM · <model>` or `Deterministic fallback` with the reason.
+
+If the server is down, ECHO fails fast (connection refused is immediate; after one failure the LLM is skipped for
+30 s) and shows the deterministic explanation. Tests: `pytest tests/test_explainer_ollama.py` (no server needed).
+
+
+
 ## Getting Started
 
 > **Note:** the commands below describe the intended setup. Update them as the project is built.

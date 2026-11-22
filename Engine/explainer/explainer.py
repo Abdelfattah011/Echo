@@ -24,6 +24,7 @@ import math
 import os
 import re
 import socket
+import time
 import urllib.error
 import urllib.request
 from decimal import Decimal
@@ -34,6 +35,10 @@ log = logging.getLogger("echo.explainer")
 LLMCallable = Callable[..., Any]
 
 DEFAULT_TIMEOUT_SECONDS = 15.0
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+OLLAMA_DEFAULT_MODEL = "llama3.2"
+OLLAMA_TIMEOUT_SECONDS = 40.0      # local models are slower than hosted APIs (first call loads the model)
+DOWN_COOLDOWN_SECONDS = 30.0       # after a connection failure, skip the LLM for a while (fail fast)
 MAX_TEMPERATURE = 0.2
 _ANSI_ESCAPES = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
 
@@ -51,7 +56,10 @@ SYSTEM_PROMPT = (
     "4. Never write SQL or code, and never propose a different fix than the one in FACTS.\n"
     "5. If fix is null or applied is false, say clearly that no fix was applied.\n"
     "6. Write short sentences in plain words for a non-expert. Put table and column names in single quotes.\n"
-    "7. Answer with one JSON object and nothing else."
+    "7. Answer with one JSON object and nothing else.\n"
+    "8. Ground every sentence in FACTS (finding, evidence, fix, verification). If a detail is not "
+    "there, leave it out.\n"
+    "9. Write in English. Never mention FACTS, JSON or these rules in your answer."
 )
 
 _USER_TEMPLATE = (
@@ -61,7 +69,8 @@ _USER_TEMPLATE = (
     '  "why_it_happened": the root cause in plain words, using only numbers and names from FACTS.\n'
     '  "fix_and_proof": what the fix did and the before/after numbers, or say that no fix was applied / '
     "not verified.\n"
-    "No markdown, no code, no extra keys."
+    'Shape: {{"summary": "...", "why_it_happened": "...", "fix_and_proof": "..."}}\n'
+    "Each value is a plain string of at most 3 short sentences. No markdown, no code, no extra keys."
 )
 
 
@@ -491,6 +500,11 @@ _NEGATIVE_CLAIM = re.compile(
 )
 
 
+_FIX_APPLIED_CLAIM = re.compile(
+    r"\b(?:fix|rewrite|rewrote|rewritten)\b.{0,40}\b(?:applied|was made|was done)\b|\bwe (?:applied|fixed)\b", re.I)
+_NEGATION = re.compile(r"\b(?:no|not|never|nothing|without|didn't|wasn't|hasn't|isn't)\b", re.I)
+
+
 def _guard(sections: Dict[str, str], facts: Dict[str, Any]) -> None:
     """Raise ValueError when an LLM answer is not grounded in the facts."""
     text = " ".join(sections.values())
@@ -516,9 +530,16 @@ def _guard(sections: Dict[str, str], facts: Dict[str, Any]) -> None:
         if severity and match.group(1).lower() != severity:
             raise ValueError("the answer changes the severity")
 
+    if not (facts.get("fix") or {}).get("applied"):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            if _FIX_APPLIED_CLAIM.search(sentence) and not _NEGATION.search(sentence):
+                raise ValueError("the answer claims a fix was applied but none was")
+
     passed = (facts.get("verification") or {}).get("passed")
-    if passed is not True and _POSITIVE_CLAIM.search(text):
-        raise ValueError("the answer claims success but verification did not pass / was not run")
+    if passed is not True:
+        for sentence in re.split(r"(?<=[.!?])\s+", text):  # "has not been verified" is honest, not a success claim
+            if _POSITIVE_CLAIM.search(sentence) and not _NEGATION.search(sentence):
+                raise ValueError("the answer claims success but verification did not pass / was not run")
     if passed is True and _NEGATIVE_CLAIM.search(text):
         raise ValueError("the answer claims failure but verification passed")
 
@@ -585,24 +606,30 @@ class LLMConfig:
     def from_env(cls, env: Mapping[str, str]) -> Optional["LLMConfig"]:
         """Return a config, or None when no LLM is configured (-> deterministic fallback)."""
         provider = (env.get("ECHO_LLM_PROVIDER") or "openai").strip().lower()
-        provider = "anthropic" if provider.startswith("anthropic") else "openai"
+        provider = "anthropic" if provider.startswith("anthropic") else "ollama" if provider.startswith("ollama") else "openai"
         key = (env.get("ECHO_LLM_API_KEY")
                or env.get("ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY") or "").strip()
+        if provider == "ollama":  # local server: never send a real cloud key, any non-empty token works
+            key = (env.get("ECHO_LLM_API_KEY") or "").strip() or "ollama"
         explicit_url = (env.get("ECHO_LLM_BASE_URL") or "").strip()
         if provider == "anthropic":
             if not key:
                 return None
             base = explicit_url or "https://api.anthropic.com"
             model = (env.get("ECHO_LLM_MODEL") or "claude-haiku-5-5").strip()
+        elif provider == "ollama":
+            base = explicit_url or OLLAMA_BASE_URL
+            model = (env.get("ECHO_LLM_MODEL") or OLLAMA_DEFAULT_MODEL).strip()
         else:
             if not key and not explicit_url:  # a local OpenAI-compatible server needs no key
                 return None
             base = explicit_url or "https://api.openai.com/v1"
             model = (env.get("ECHO_LLM_MODEL") or "gpt-4o-mini").strip()
+        default_timeout = OLLAMA_TIMEOUT_SECONDS if provider == "ollama" else DEFAULT_TIMEOUT_SECONDS
         try:
-            timeout = float(env.get("ECHO_LLM_TIMEOUT") or DEFAULT_TIMEOUT_SECONDS)
+            timeout = float(env.get("ECHO_LLM_TIMEOUT") or default_timeout)
         except ValueError:
-            timeout = DEFAULT_TIMEOUT_SECONDS
+            timeout = default_timeout
         try:
             temperature = float(env.get("ECHO_LLM_TEMPERATURE") or 0.1)
         except ValueError:
@@ -620,9 +647,12 @@ class HttpLLMClient:
 
     def __init__(self, config: LLMConfig):
         self.config = config
+        self._down_until = 0.0
 
     def __call__(self, system_prompt: str, user_prompt: str) -> str:
         cfg = self.config
+        if time.monotonic() < self._down_until:  # server was unreachable a moment ago: fail fast
+            raise RuntimeError("LLM unreachable (skipped: server was down moments ago)")
         if cfg.provider == "anthropic":
             url = cfg.base_url.rstrip("/") + "/v1/messages"
             headers = {"content-type": "application/json", "x-api-key": cfg.api_key or "",
@@ -637,17 +667,50 @@ class HttpLLMClient:
             body = {"model": cfg.model, "temperature": cfg.temperature, "max_tokens": cfg.max_tokens,
                     "messages": [{"role": "system", "content": system_prompt},
                                  {"role": "user", "content": user_prompt}]}
+            if cfg.provider == "ollama":
+                body["stream"] = False
+                body["response_format"] = {"type": "json_object"}
         request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=cfg.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"LLM HTTP error {exc.code}") from None
+            hint = f" (model not found: run 'ollama pull {cfg.model}')" if cfg.provider == "ollama" and exc.code == 404 else ""
+            raise RuntimeError(f"LLM HTTP error {exc.code}{hint}") from None
         except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as exc:
+            self._down_until = time.monotonic() + DOWN_COOLDOWN_SECONDS
             raise RuntimeError(f"LLM unreachable: {type(exc).__name__}") from None
         except ValueError:
             raise RuntimeError("LLM returned a non-JSON response") from None
         return _response_text(payload)
+
+
+def check_llm_health(base_url: Optional[str] = None, model: Optional[str] = None,
+                     timeout: float = 3.0) -> Dict[str, Any]:
+    """Quick reachability check for a local Ollama server. Never raises.
+
+    Tries Ollama's ``/api/tags`` first, then the OpenAI-style ``/v1/models``.
+    Returns {ok, endpoint, models, model_available, error}.
+    """
+    base = (base_url or OLLAMA_BASE_URL).strip().rstrip("/")
+    root = base[:-3] if base.endswith("/v1") else base
+    result: Dict[str, Any] = {"ok": False, "endpoint": None, "models": [], "model_available": None, "error": None}
+    for url, key in ((root + "/api/tags", "models"), (base + "/models", "data")):
+        try:
+            request = urllib.request.Request(url, headers={"accept": "application/json"})
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            result["error"] = strip_ansi(f"{type(exc).__name__}: {exc}")[:120]
+            continue
+        items = payload.get(key) if isinstance(payload, dict) else None
+        names = [str(m.get("name") or m.get("id")) for m in (items or []) if isinstance(m, dict)]
+        result.update(ok=True, endpoint=url, models=names, error=None)
+        if model:
+            wanted, lowered = model.strip().lower(), [n.lower() for n in names]
+            result["model_available"] = wanted in lowered or f"{wanted}:latest" in lowered
+        return result
+    return result
 
 
 _DOTENV_LOADED = False
@@ -703,7 +766,19 @@ class LLMExplainer:
         return self._llm is not None
 
     # ---- one finding ------------------------------------------------------ #
-    def explain_finding(
+    def explain_finding(self, bug: Optional[Dict[str, Any]], fix_result: Any = None,
+                        verification_result: Any = None) -> Dict[str, Any]:
+        """Return {summary, why_it_happened, fix_and_proof, plain_text, source, fallback_reason, model, provider}.
+
+        ``model`` / ``provider`` name the configured LLM (None when no LLM is configured); ``source``
+        says whether that LLM actually produced the text.
+        """
+        result = self._explain_one(bug, fix_result, verification_result)
+        result["model"] = self.config.model if self.config else None
+        result["provider"] = self.config.provider if self.config else None
+        return result
+
+    def _explain_one(
         self,
         bug: Optional[Dict[str, Any]],
         fix_result: Any = None,
@@ -779,12 +854,14 @@ class LLMExplainer:
     ) -> Dict[str, Any]:
         """Explain an analysis (``detected_bugs``) together with its fix report and proof."""
         try:
-            return self._explain_report(analysis, fix_report, verification_result)
+            result = self._explain_report(analysis, fix_report, verification_result)
         except Exception as exc:  # noqa: BLE001
             log.exception("explain_report failed")
             result = self._emergency(f"{type(exc).__name__}")
             result["findings"] = []
-            return result
+        result.setdefault("model", self.config.model if self.config else None)
+        result.setdefault("provider", self.config.provider if self.config else None)
+        return result
 
     def _explain_report(self, analysis, fix_report, verification_result) -> Dict[str, Any]:
         analysis = _as_dict(analysis)

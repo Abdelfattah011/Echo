@@ -637,12 +637,41 @@ EXPLAINER_MODULES = (
 )
 
 
+def _build_explainer(module):
+    """Explainer for the sidebar choice. None = the module default (ECHO_LLM_* environment)."""
+    import os
+
+    mode = st.session_state.get("llm_mode", "Auto (environment)")
+    if mode.startswith("Auto"):
+        return None
+    url, model = st.session_state.get("llm_url") or "", st.session_state.get("llm_model") or ""
+    key = (mode, url, model)
+    cached = st.session_state.get("_explainer_cache")
+    if cached and cached[0] == key:  # keep the instance: it remembers that a server was down
+        return cached[1]
+    env = {} if mode.startswith("Deterministic") else {
+        **os.environ, "ECHO_LLM_PROVIDER": "ollama", "ECHO_LLM_BASE_URL": url, "ECHO_LLM_MODEL": model}
+    explainer = module.LLMExplainer(env=env)
+    st.session_state["_explainer_cache"] = (key, explainer)
+    return explainer
+
+
+def check_llm(url: str, model: str) -> Dict[str, Any]:
+    for path in EXPLAINER_MODULES:
+        try:
+            return importlib.import_module(path).check_llm_health(url, model)
+        except Exception:  # noqa: BLE001
+            continue
+    return {"ok": False, "error": "explainer module not found", "models": [], "model_available": None}
+
+
 def explainer_adapter(analysis: Dict[str, Any], fix_report: Dict[str, Any], ver: Dict[str, Any]) -> Dict[str, Any]:
     analysis, fix_report, ver = as_dict(analysis), as_dict(fix_report), as_dict(ver)
     for path in EXPLAINER_MODULES:
         try:
-            explain_report = importlib.import_module(path).explain_report
-            raw = explain_report(analysis, fix_report, ver if ver.get("provided") else None)
+            module = importlib.import_module(path)
+            raw = module.explain_report(analysis, fix_report, ver if ver.get("provided") else None,
+                                        explainer=_build_explainer(module))
             if isinstance(raw, dict) and raw.get("plain_text"):
                 raw["source"] = "llm" if raw.get("source") == "llm" else "fallback"
                 return raw
@@ -899,6 +928,19 @@ with st.sidebar:
         f"<span class='badge live t-{'ok' if online else 'bad'}'>{'ENGINE ONLINE' if online else 'ENGINE OFFLINE'}</span>",
         unsafe_allow_html=True,
     )
+    with st.expander("🧠 Explainer (local Ollama)"):
+        st.selectbox("Mode", ["Auto (environment)", "Ollama (local)", "Deterministic only"], key="llm_mode",
+                     help="Code always decides. The LLM only words the explanation; any doubt falls back to the deterministic text.")
+        st.text_input("Ollama base URL", "http://localhost:11434/v1", key="llm_url")
+        st.text_input("Model", "llama3.2", key="llm_model")
+        if st.button("Check connection", key="llm_check"):
+            health = check_llm(st.session_state["llm_url"], st.session_state["llm_model"])
+            if not health.get("ok"):
+                st.error(f"Ollama not reachable: {strip_ansi(health.get('error'))}. Explanations use the deterministic fallback.")
+            elif health.get("model_available") is False:
+                st.warning(f"Server is up but the model is missing. Run: ollama pull {strip_ansi(st.session_state['llm_model'])}")
+            else:
+                st.success(f"Ollama is up. {len(health.get('models') or [])} model(s) installed.")
     st.markdown("#### ⚡ System modules")
     st.markdown(
         "".join(
@@ -1272,7 +1314,12 @@ else:
 
     if display_expl:
         is_llm = display_expl.get("source") == "llm"
-        tone, label = ("info", "LLM") if is_llm else ("warn", "Deterministic fallback")
+        model_name = esc(display_expl.get("model"))
+        tone, label = (
+            ("info", "LLM" + (f" · {model_name}" if model_name else ""))
+            if is_llm
+            else ("warn", "Deterministic fallback" + (f" · {model_name} not used" if model_name else ""))
+        )
         parts = "".join(
             f"<h4>{title}</h4><p>{esc(display_expl.get(key))}</p>"
             for title, key in (

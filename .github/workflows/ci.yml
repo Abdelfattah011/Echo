@@ -1,0 +1,32 @@
+name: CI
+
+# Runs on every pull request into main, and on every push to main.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the libraries
+        run: pip install -r requirements.txt
+
+      - name: Run the tests
+        run: python -m pytest
+
+      - name: Benchmark quality gate
+        # Fails the pull request if ECHO catches fewer bugs than benchmark/baseline.json,
+        # or complains about more clean queries.
+        run: python benchmark/run_benchmark.py --quick --check

@@ -1,101 +1,66 @@
-<<<<<<< HEAD
-create database Echo
-use Echo
+-- =====================================================================
+-- Migration 001: Bronze Layer Schema for ECHO (PostgreSQL)
+-- Tables: bronze.runs -> bronze.steps, bronze.cases
+-- Every step and every case belongs to exactly one run.
+-- A case can also point to the step where its bug appeared (step_id).
+-- =====================================================================
 
--- Migration: Bronze Layer Schema for Echo Engine (SQL Server Compatible)
+-- 1. Dedicated schema for the Bronze layer
+CREATE SCHEMA IF NOT EXISTS bronze;
 
--- 1. Create the dedicated schema for the Bronze layer safely in SQL Server
-IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'bronze')
-BEGIN
-    EXEC('CREATE SCHEMA bronze')
-END
-GO
-
--- 2. Runs Table (Stores raw execution sessions)
-CREATE TABLE bronze.runs (
-    run_id INT IDENTITY(1,1) PRIMARY KEY,
-    query_text NVARCHAR(MAX) NOT NULL,
-    executed_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET(),
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING'
+-- 2. RUNS: one row per analysis session of one SQL query
+CREATE TABLE IF NOT EXISTS bronze.runs (
+    run_id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    query_text   TEXT         NOT NULL,                     -- the SQL query the user submitted
+    executed_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    status       VARCHAR(50)  NOT NULL DEFAULT 'PENDING',
+    CONSTRAINT chk_runs_status
+        CHECK (status IN ('PENDING', 'RUNNING', 'DONE', 'FAILED'))
 );
-GO
 
--- 3. Cases Table (Stores raw detected bugs and anomalies per run)
-CREATE TABLE bronze.cases (
-    case_id INT IDENTITY(1,1) PRIMARY KEY,
-    run_id INT FOREIGN KEY REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
-    bug_type VARCHAR(100) NOT NULL,
-    severity VARCHAR(50) NOT NULL,
-    description NVARCHAR(MAX),
-    created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+-- 3. STEPS: each parsed step of the query, with what it produced
+--    (written by the parser / step runner)
+CREATE TABLE IF NOT EXISTS bronze.steps (
+    step_id      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id       INT          NOT NULL
+                     REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
+    step_number  INT          NOT NULL,                     -- order inside the run (1, 2, 3...)
+    step_type    VARCHAR(50)  NOT NULL,
+    step_name    VARCHAR(100),
+    sql_snippet  TEXT         NOT NULL,                     -- the SQL of this step
+    row_count    BIGINT,                                    -- rows returned by this step
+    sum_value    NUMERIC,                                   -- SUM of the checked column after this step
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_steps_run_step UNIQUE (run_id, step_number),
+    CONSTRAINT chk_steps_row_count CHECK (row_count IS NULL OR row_count >= 0),
+    CONSTRAINT chk_steps_step_type
+        CHECK (step_type IN ('FROM', 'JOIN', 'WHERE', 'GROUP_BY', 'AGGREGATE', 'SELECT'))
 );
-GO
 
--- 4. Steps Table (Stores raw parsed structural steps)
-CREATE TABLE bronze.steps (
-    step_id INT IDENTITY(1,1) PRIMARY KEY,
-    run_id INT FOREIGN KEY REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
-    step_number INT NOT NULL,
-    step_type VARCHAR(50) NOT NULL,
-    step_name VARCHAR(100),
-    sql_snippet NVARCHAR(MAX) NOT NULL,
-    created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+-- 4. CASES: each bug found in a run, with its fix and proof
+--    (written by the detectors and the explainer / fix proof)
+CREATE TABLE IF NOT EXISTS bronze.cases (
+    case_id        INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id         INT          NOT NULL
+                       REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
+    step_id        INT
+                       REFERENCES bronze.steps(step_id) ON DELETE SET NULL,
+                                                            -- step where the bug appeared (optional)
+    detector_name  VARCHAR(100) NOT NULL,                   -- which detector found the bug
+    bug_type       VARCHAR(100) NOT NULL,                   -- e.g. JOIN_FAN_OUT
+    severity       VARCHAR(50)  NOT NULL,
+    description    TEXT,                                    -- explanation of the bug
+    fix_sql        TEXT,                                    -- the corrected query
+    result_before  JSONB,                                   -- result of the original query
+    result_after   JSONB,                                   -- result of the fixed query
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_cases_severity
+        CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL'))
 );
-GO
 
--- Create performance indexes inside the bronze schema
-CREATE INDEX idx_bronze_runs_executed_at ON bronze.runs(executed_at);
-CREATE INDEX idx_bronze_cases_run_id ON bronze.cases(run_id);
-CREATE INDEX idx_bronze_steps_run_id ON bronze.steps(run_id);
-GO
-=======
-create database Echo
-use Echo
-
--- Migration: Bronze Layer Schema for Echo Engine (SQL Server Compatible)
-
--- 1. Create the dedicated schema for the Bronze layer safely in SQL Server
-IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'bronze')
-BEGIN
-    EXEC('CREATE SCHEMA bronze')
-END
-GO
-
--- 2. Runs Table (Stores raw execution sessions)
-CREATE TABLE bronze.runs (
-    run_id INT IDENTITY(1,1) PRIMARY KEY,
-    query_text NVARCHAR(MAX) NOT NULL,
-    executed_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET(),
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING'
-);
-GO
-
--- 3. Cases Table (Stores raw detected bugs and anomalies per run)
-CREATE TABLE bronze.cases (
-    case_id INT IDENTITY(1,1) PRIMARY KEY,
-    run_id INT FOREIGN KEY REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
-    bug_type VARCHAR(100) NOT NULL,
-    severity VARCHAR(50) NOT NULL,
-    description NVARCHAR(MAX),
-    created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
-);
-GO
-
--- 4. Steps Table (Stores raw parsed structural steps)
-CREATE TABLE bronze.steps (
-    step_id INT IDENTITY(1,1) PRIMARY KEY,
-    run_id INT FOREIGN KEY REFERENCES bronze.runs(run_id) ON DELETE CASCADE,
-    step_number INT NOT NULL,
-    step_type VARCHAR(50) NOT NULL,
-    step_name VARCHAR(100),
-    sql_snippet NVARCHAR(MAX) NOT NULL,
-    created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
-);
-GO
-
--- Create performance indexes inside the bronze schema
-CREATE INDEX idx_bronze_runs_executed_at ON bronze.runs(executed_at);
-CREATE INDEX idx_bronze_cases_run_id ON bronze.cases(run_id);
-CREATE INDEX idx_bronze_steps_run_id ON bronze.steps(run_id);
-GO
->>>>>>> 11cfc2f119062be38a47a4b5278be27c2172ba14
+-- 5. Indexes
+CREATE INDEX IF NOT EXISTS idx_bronze_runs_executed_at ON bronze.runs(executed_at);
+CREATE INDEX IF NOT EXISTS idx_bronze_runs_status      ON bronze.runs(status);
+CREATE INDEX IF NOT EXISTS idx_bronze_cases_run_id     ON bronze.cases(run_id);
+CREATE INDEX IF NOT EXISTS idx_bronze_cases_step_id    ON bronze.cases(step_id);
+-- steps(run_id) is already covered by the unique constraint on (run_id, step_number)

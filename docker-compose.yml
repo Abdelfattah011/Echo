@@ -1,1 +1,59 @@
+# Start everything:   docker compose up --build
+#   API        -> http://localhost:8000/docs
+#   Dashboard  -> http://localhost:8501
+# Stop:               docker compose down
+#
+# PostgreSQL is optional for now (the API keeps its data in memory), so it sits behind a
+# profile: `docker compose up -d postgres` or `docker compose --profile db up` starts it.
 
+services:
+  api:
+    build: .
+    image: echo-app
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    image: echo-app
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      # Inside Docker the API is reached by its service name, not 127.0.0.1.
+      ECHO_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    profiles: ["db"]
+    environment:
+      POSTGRES_USER: echo
+      POSTGRES_PASSWORD: echo
+      POSTGRES_DB: echo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Turn this on once db/migrations/001_bronze_layer_schema.sql has its merge-conflict
+      # markers removed, otherwise Postgres stops while loading it:
+      # - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U echo -d echo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

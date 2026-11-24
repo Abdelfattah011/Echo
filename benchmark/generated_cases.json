@@ -1,0 +1,492 @@
+[
+    {
+        "case_id": "FANOUT_001",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_line\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_002",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_id\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Completed' AND o.amount > 200;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_003",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_line\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Completed';",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_004",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_line\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.amount > 250;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_005",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_name, a.address_line\n           FROM customers c JOIN customer_addresses a\n             ON c.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_006",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_name, c.status, a.address_line\n           FROM customers c JOIN customer_addresses a\n             ON c.customer_id = a.customer_id\n           WHERE c.status = 'Inactive';",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_007",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_3",
+        "sql": "SELECT o.order_id, c.customer_name, a.address_line\n           FROM orders o\n           JOIN customers c ON o.customer_id = c.customer_id\n           JOIN customer_addresses a ON c.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_008",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_id\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.order_id < 3000;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_009",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.amount, a.address_line\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Pending';",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_010",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT c.status, a.address_line\n           FROM customers c JOIN customer_addresses a\n             ON c.customer_id = a.customer_id\n           WHERE c.status = 'Active';",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_011",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.status, a.address_line\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Pending' AND o.amount > 100;",
+        "is_clean": false
+    },
+    {
+        "case_id": "FANOUT_012",
+        "bug_type": "JOIN Fan-out",
+        "expected_step": "step_3",
+        "sql": "SELECT o.order_id, o.status, c.customer_name, a.address_line\n           FROM orders o\n           JOIN customers c ON o.customer_id = c.customer_id\n           JOIN customer_addresses a ON c.customer_id = a.customer_id\n           WHERE o.amount > 300;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_001",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS total_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.order_id BETWEEN 1 AND 100;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_002",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS total_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.order_id BETWEEN 101 AND 500;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_003",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS total_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Completed';",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_004",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS pending_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Pending';",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_005",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT COUNT(o.order_id) AS order_count\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_006",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS total_revenue\n            FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_007",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT o.customer_id, SUM(o.amount) AS customer_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           GROUP BY o.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_008",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT o.status, SUM(o.amount) AS revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           GROUP BY o.status;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_009",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT COUNT(DISTINCT o.order_id) AS distinct_orders,\n                  COUNT(o.order_id) AS joined_order_rows\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_010",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT SUM(o.amount) AS high_value_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.amount >= 400;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_011",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_2",
+        "sql": "SELECT o.customer_id, SUM(o.amount) AS total_revenue\n           FROM orders o JOIN customer_addresses a\n             ON o.customer_id = a.customer_id\n           WHERE o.status = 'Completed'\n           GROUP BY o.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TOTALS_012",
+        "bug_type": "Inflated Totals",
+        "expected_step": "step_3",
+        "sql": "SELECT SUM(o.amount) AS revenue, COUNT(*) AS joined_rows\n           FROM orders o\n           JOIN customers c ON o.customer_id = c.customer_id\n           JOIN customer_addresses a ON c.customer_id = a.customer_id\n           WHERE o.order_id <= 1200;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_001",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.order_id, o.amount\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.status = 'Completed';",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_002",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.order_id\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.status = 'Pending';",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_003",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.amount\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.amount > 100;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_004",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.amount\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.amount IS NOT NULL;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_005",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.order_id\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.order_id > 0;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_006",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, COUNT(o.order_id) AS order_count\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.status <> 'Cancelled'\n           GROUP BY c.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_007",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.status\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE LOWER(o.status) = 'completed';",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_008",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.amount\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE COALESCE(o.amount, 0) > 0;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_009",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.order_id\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.status IN ('Completed', 'Pending');",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_010",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.amount\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.amount BETWEEN 100 AND 300;",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_011",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, o.order_id\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE NOT (o.status IS NULL);",
+        "is_clean": false
+    },
+    {
+        "case_id": "LOST_ROWS_012",
+        "bug_type": "Lost Rows in a LEFT JOIN",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_id, SUM(o.amount) AS revenue\n           FROM left_join_customers c LEFT JOIN left_join_orders o\n             ON c.customer_id = o.customer_id\n           WHERE o.amount >= 150\n           GROUP BY c.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_001",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_002",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.sales_rep_id, e.employee_name\n           FROM null_key_orders o LEFT JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE o.sales_rep_id IS NULL;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_003",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.sales_rep_id, e.employee_name\n           FROM null_key_orders o LEFT JOIN null_key_employees e\n           ON o.sales_rep_id = e.employee_id\n           WHERE e.employee_id IS NULL;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_004",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o INNER JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE o.sales_rep_id IS NOT NULL;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_005",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT COUNT(*) AS matched_rows\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_006",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.sales_rep_id, COUNT(*) AS order_count\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           GROUP BY o.sales_rep_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_007",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE o.order_id BETWEEN 1 AND 6;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_008",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE o.amount >= 150;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_009",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o LEFT JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE o.sales_rep_id IS NOT NULL;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_010",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, e.employee_name\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           WHERE e.employee_name <> 'Unassigned';",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_011",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.sales_rep_id, e.employee_id\n           FROM null_key_orders o FULL OUTER JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "NULL_KEYS_012",
+        "bug_type": "NULL Join Keys",
+        "expected_step": "step_2",
+        "sql": "SELECT o.sales_rep_id, SUM(o.amount) AS total_amount\n           FROM null_key_orders o JOIN null_key_employees e\n             ON o.sales_rep_id = e.employee_id\n           GROUP BY o.sales_rep_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_001",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.customer_id, c.customer_name\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_002",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM type_mismatch_orders o INNER JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE o.amount > 100;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_003",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.customer_id, COUNT(*) AS order_count\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           GROUP BY o.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_004",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_name, SUM(o.amount) AS revenue\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           GROUP BY c.customer_name;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_005",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM type_mismatch_orders o LEFT JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE o.order_id <= 5;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_006",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE c.customer_name LIKE 'A%';",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_007",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, o.customer_id\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE o.amount BETWEEN 100 AND 300;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_008",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT COUNT(DISTINCT o.customer_id) AS matched_customers\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_009",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE o.status = 'Completed';",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_010",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.customer_id, AVG(o.amount) AS average_amount\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           GROUP BY o.customer_id;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_011",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           WHERE o.order_id > 3 AND o.amount < 400;",
+        "is_clean": false
+    },
+    {
+        "case_id": "TYPE_MISMATCH_012",
+        "bug_type": "Key Type Mismatch",
+        "expected_step": "step_2",
+        "sql": "SELECT c.customer_name, COUNT(o.order_id) AS orders_count\n           FROM type_mismatch_orders o JOIN customers_text_keys c\n             ON o.customer_id = c.customer_id\n           GROUP BY c.customer_name\n           HAVING COUNT(o.order_id) > 0;",
+        "is_clean": false
+    },
+    {
+        "case_id": "CLEAN_001",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT order_id, customer_id, amount\n           FROM orders WHERE status = 'Completed';",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_002",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT customer_id, customer_name\n           FROM customers WHERE status = 'Active';",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_003",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT COUNT(*) AS total_orders FROM orders;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_004",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT SUM(amount) AS total_revenue FROM orders;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_005",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT AVG(amount) AS average_order FROM orders;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_006",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM orders o JOIN customers c\n             ON o.customer_id = c.customer_id;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_007",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT c.customer_id, COUNT(o.order_id) AS order_count\n           FROM customers c LEFT JOIN orders o\n             ON c.customer_id = o.customer_id\n           GROUP BY c.customer_id;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_008",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT o.order_id, c.customer_name\n           FROM orders o LEFT JOIN customers c\n             ON o.customer_id = c.customer_id\n           WHERE o.status = 'Completed';",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_009",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT customer_id, COUNT(*) AS address_count\n           FROM customer_addresses GROUP BY customer_id;",
+        "is_clean": true
+    },
+    {
+        "case_id": "CLEAN_010",
+        "bug_type": "Clean",
+        "expected_step": null,
+        "sql": "SELECT order_id, amount FROM orders\n           WHERE amount > 100 ORDER BY amount DESC;",
+        "is_clean": true
+    }
+]

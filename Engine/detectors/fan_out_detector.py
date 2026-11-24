@@ -30,7 +30,7 @@ class FanOutDetector(BaseBugDetector):
     # Set True if a dedicated Cartesian-product detector is installed, to avoid double alerts.
     DEFER_CARTESIAN = False
     # False = stay completely silent when the expansion is proven intentional (aggregates only on the many side).
-    REPORT_LIKELY_INTENTIONAL = True
+    REPORT_LIKELY_INTENTIONAL = False
     MAX_RELATED = 10
 
     # ------------------------------------------------------------------ #

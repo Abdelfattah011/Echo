@@ -100,7 +100,18 @@ class KeyTypeMismatchDetector(BaseBugDetector):
         for pair in details.get("key_pairs") or []:
             left_alias, right_alias = pair.get("left_alias"), pair.get("right_alias")
             left_col, right_col = pair.get("left_column"), pair.get("right_column")
+
+            target_alias = details.get("target_alias")
+            if right_alias != target_alias:
+                continue
             left_info = alias_map.get(left_alias) if left_alias is not None else None
+            if left_info is None:
+                left_aliases = details.get("left_aliases") or []
+
+                # Safely support USING when there is exactly one left relation.
+                if len(left_aliases) == 1:
+                    left_alias = left_aliases[0]
+                    left_info = alias_map.get(left_alias)
             if not (left_col and right_col and right_relation and isinstance(left_info, dict)
                     and left_info.get("relation_sql")):
                 continue

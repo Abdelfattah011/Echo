@@ -2,10 +2,8 @@ import duckdb
 from Engine.runner.runner import EchoEngineRunner
 
 print("🚀 Starting Orphan Records & Aggregation Anomaly Test...")
-
 # 1. إنشاء اتصال مؤقت بـ DuckDB
 conn = duckdb.connect(database=":memory:")
-
 # 2. إنشاء جداول فيها بيانات يتيمة (Orphan Records) - مبيعات لمنتجات غير مسجلة في جدول الـ Products
 conn.execute("""
     CREATE TABLE products (
@@ -21,7 +19,6 @@ conn.execute("""
         quantity INT
     );
 """)
-
 # إدخال بيانات: منتج رقم 1 و 2 موجودين، لكن فيه مبيعات لمنتج رقم 99 (مش موجود في جدول المنتجات!)
 conn.execute("INSERT INTO products VALUES (1, 'Laptop'), (2, 'Mouse');")
 conn.execute("INSERT INTO sales VALUES (101, 1, 5), (102, 2, 3), (103, 99, 10);")  # منتج 99 يتيم (Orphan)

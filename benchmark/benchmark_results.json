@@ -1,0 +1,254 @@
+{
+    "mode": "quick",
+    "summary": {
+        "total_cases": 7,
+        "broken_cases": 5,
+        "clean_cases": 2,
+        "detected_cases": 5,
+        "failed_cases": 0,
+        "detection_rate": 100.0,
+        "right_step_accuracy": 100.0,
+        "right_step_coverage": 100.0,
+        "false_positives": 0,
+        "false_positive_rate": 0.0,
+        "average_execution_time_ms": 35.48,
+        "average_wall_clock_time_ms": 78.91,
+        "detector_errors": 0,
+        "per_type": {
+            "JOIN Fan-out": {
+                "total": 1,
+                "detected": 1,
+                "detection_rate": 100.0,
+                "right_step": 1,
+                "right_step_accuracy": 100.0,
+                "right_step_coverage": 100.0
+            },
+            "Inflated Totals": {
+                "total": 1,
+                "detected": 1,
+                "detection_rate": 100.0,
+                "right_step": 1,
+                "right_step_accuracy": 100.0,
+                "right_step_coverage": 100.0
+            },
+            "Lost Rows in a LEFT JOIN": {
+                "total": 1,
+                "detected": 1,
+                "detection_rate": 100.0,
+                "right_step": 1,
+                "right_step_accuracy": 100.0,
+                "right_step_coverage": 100.0
+            },
+            "NULL Join Keys": {
+                "total": 1,
+                "detected": 1,
+                "detection_rate": 100.0,
+                "right_step": 1,
+                "right_step_accuracy": 100.0,
+                "right_step_coverage": 100.0
+            },
+            "Key Type Mismatch": {
+                "total": 1,
+                "detected": 1,
+                "detection_rate": 100.0,
+                "right_step": 1,
+                "right_step_accuracy": 100.0,
+                "right_step_coverage": 100.0
+            }
+        }
+    },
+    "results": [
+        {
+            "case_id": "FANOUT_001",
+            "bug_type": "JOIN Fan-out",
+            "expected_step": "step_2",
+            "is_clean": false,
+            "detected": true,
+            "right_step": true,
+            "false_positive": false,
+            "detected_bug_types": [
+                "Possible JOIN Fan-out"
+            ],
+            "suspicious_steps": [
+                "step_2"
+            ],
+            "execution_time_ms": 53.0,
+            "wall_clock_ms": 136.15,
+            "detector_times_ms": {
+                "FanOutDetector": 8.38,
+                "GeneralAnomalyDetector": 0.12,
+                "InflatedTotalsDetector": 0.07,
+                "KeyTypeMismatchDetector": 2.48,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 2.7
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "TOTALS_001",
+            "bug_type": "Inflated Totals",
+            "expected_step": "step_2",
+            "is_clean": false,
+            "detected": true,
+            "right_step": true,
+            "false_positive": false,
+            "detected_bug_types": [
+                "Possible JOIN Fan-out",
+                "Inflated Aggregate"
+            ],
+            "suspicious_steps": [
+                "step_2",
+                "step_2"
+            ],
+            "execution_time_ms": 51.1,
+            "wall_clock_ms": 98.11,
+            "detector_times_ms": {
+                "FanOutDetector": 5.94,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.08,
+                "KeyTypeMismatchDetector": 1.75,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.42
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "LOST_ROWS_001",
+            "bug_type": "Lost Rows in a LEFT JOIN",
+            "expected_step": "step_2",
+            "is_clean": false,
+            "detected": true,
+            "right_step": true,
+            "false_positive": false,
+            "detected_bug_types": [
+                "Lost Rows in a LEFT JOIN",
+                "Possible JOIN Fan-out"
+            ],
+            "suspicious_steps": [
+                "step_2",
+                "step_2"
+            ],
+            "execution_time_ms": 34.39,
+            "wall_clock_ms": 71.46,
+            "detector_times_ms": {
+                "FanOutDetector": 5.36,
+                "GeneralAnomalyDetector": 0.11,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.73,
+                "LostRowsDetector": 0.07,
+                "NullJoinKeysDetector": 1.39
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "NULL_KEYS_001",
+            "bug_type": "NULL Join Keys",
+            "expected_step": "step_2",
+            "is_clean": false,
+            "detected": true,
+            "right_step": true,
+            "false_positive": false,
+            "detected_bug_types": [
+                "NULL Join Keys"
+            ],
+            "suspicious_steps": [
+                "step_2"
+            ],
+            "execution_time_ms": 29.55,
+            "wall_clock_ms": 59.57,
+            "detector_times_ms": {
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.57,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.76
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "TYPE_MISMATCH_001",
+            "bug_type": "Key Type Mismatch",
+            "expected_step": "step_2",
+            "is_clean": false,
+            "detected": true,
+            "right_step": true,
+            "false_positive": false,
+            "detected_bug_types": [
+                "Join Key Type Mismatch"
+            ],
+            "suspicious_steps": [
+                "step_2"
+            ],
+            "execution_time_ms": 34.12,
+            "wall_clock_ms": 66.73,
+            "detector_times_ms": {
+                "FanOutDetector": 0.12,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.06,
+                "KeyTypeMismatchDetector": 2.01,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.87
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "CLEAN_001",
+            "bug_type": "Clean",
+            "expected_step": null,
+            "is_clean": true,
+            "detected": false,
+            "right_step": false,
+            "false_positive": false,
+            "detected_bug_types": [],
+            "suspicious_steps": [],
+            "execution_time_ms": 22.28,
+            "wall_clock_ms": 65.27,
+            "detector_times_ms": {
+                "FanOutDetector": 0.11,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.01,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.01
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        },
+        {
+            "case_id": "CLEAN_002",
+            "bug_type": "Clean",
+            "expected_step": null,
+            "is_clean": true,
+            "detected": false,
+            "right_step": false,
+            "false_positive": false,
+            "detected_bug_types": [],
+            "suspicious_steps": [],
+            "execution_time_ms": 23.95,
+            "wall_clock_ms": 55.05,
+            "detector_times_ms": {
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.01,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.01
+            },
+            "detector_errors": 0,
+            "detector_error_details": [],
+            "error": null
+        }
+    ]
+}

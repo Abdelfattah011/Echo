@@ -1,7 +1,28 @@
 
+# Python cache
 __pycache__/
 *.pyc
+*.py[cod]
+*$py.class
 
+# Virtual environments
 .venv/
+venv/
+
+# Environment variables and secrets
 .env
+.env.*
+
+# IDE and editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Benchmark results
 benchmark/results/

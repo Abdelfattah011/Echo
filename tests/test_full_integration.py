@@ -1,6 +1,12 @@
-
+import logging
 import duckdb
 from Engine.runner.runner import EchoEngineRunner
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 print("🚀 Starting Full Integration Test...")
 

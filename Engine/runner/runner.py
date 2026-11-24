@@ -198,21 +198,34 @@ class EchoEngineRunner:
             entry.update(status="failed", error=str(exc), error_type=type(exc).__name__)
             return entry
 
+        entry["measure_values"] = {}
+        measure_queries = step.get("measure_queries") or {}
+
+        for key, query in measure_queries.items():
+            try:
+                value = session.execute(query).fetchone()[0]
+                entry["measure_values"][key] = (
+                    float(value) if value is not None else None
+                )
+            except Exception:  # noqa: BLE001 - measure columns may not exist yet at this step
+                entry["measure_values"][key] = None
+
+        # Keep backward compatibility with existing SUM-based detectors.
         measure_sql = step.get("measure_query")
         if measure_sql:
             try:
                 value = session.execute(measure_sql).fetchone()[0]
                 entry["sum_value"] = float(value) if value is not None else None
-            except Exception:  # noqa: BLE001 - measure columns may not exist yet at this step
+            except Exception:  # noqa: BLE001
                 entry["sum_value"] = None
-
+    
         if (self.collect_column_metrics and sql and entry["row_count"]
                 and entry["row_count"] <= self.metrics_row_limit):
             try:
                 cursor = session.execute(sql)
                 columns = [c[0] for c in cursor.description] if cursor.description else []
                 entry["columns_metrics"] = self._column_metrics(columns, cursor.fetchall())
-                if entry["sum_value"] is None and entry["columns_metrics"]:
+                if entry.get("sum_value") is None and entry["columns_metrics"]:
                     entry["sum_value"] = next(iter(entry["columns_metrics"].values()))
             except Exception as exc:  # noqa: BLE001
                 entry["columns_metrics"] = {}

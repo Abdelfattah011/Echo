@@ -23,10 +23,13 @@ jobs:
       - name: Install the libraries
         run: pip install -r requirements.txt
 
+      - name: Generate benchmark database
+        run: python -m benchmark.data_generator
+
       - name: Run the tests
         run: python -m pytest
 
       - name: Benchmark quality gate
         # Fails the pull request if ECHO catches fewer bugs than benchmark/baseline.json,
         # or complains about more clean queries.
-        run: python benchmark/run_benchmark.py --quick --check
+        run: python -m benchmark.run_benchmark --quick --check

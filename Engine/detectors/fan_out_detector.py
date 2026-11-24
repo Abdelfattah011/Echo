@@ -29,7 +29,7 @@ class FanOutDetector(BaseBugDetector):
     HIGH_SEVERITY_RATIO = 1.5
     # Set True if a dedicated Cartesian-product detector is installed, to avoid double alerts.
     DEFER_CARTESIAN = False
-    # False = stay completely silent when the expansion is proven intentional (aggregates only on the many side).
+    # True = report proven intentional expansions with Low severity.
     REPORT_LIKELY_INTENTIONAL = True
     MAX_RELATED = 10
 
@@ -108,7 +108,22 @@ class FanOutDetector(BaseBugDetector):
                 key_columns=right_columns,
             )
         
-        impact = self._aggregate_impact(step, details, aggregates.get(item["scope"]), proof, conn)
+        aggregate = aggregates.get(item["scope"])
+        impact = self._aggregate_impact(
+            step, details, aggregate, proof, conn
+        )
+
+        measures = (aggregate or {}).get("measures") or []
+
+        # A COUNT on the many-side is expected in a one-to-many relationship.
+        count_only = bool(measures) and all(
+        str(measure.get("func") or "").upper() == "COUNT"
+        for measure in measures
+        )
+
+        if impact == "benign" and count_only:
+            return None
+
         if impact == "benign" and not self.REPORT_LIKELY_INTENTIONAL:
             return None
 

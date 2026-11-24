@@ -104,7 +104,7 @@ def _is_null_rejecting(cond):
     if isinstance(cond, exp.Not):
         inner = cond.this.unnest()
         return isinstance(inner, exp.Is) and isinstance(inner.expression, exp.Null)
-    for risky in _types("Coalesce", "Case", "Or"):
+    for risky in _types("Case", "Or"):
         if cond.find(risky):
             return False
     return isinstance(cond, _NULL_REJECTING)
@@ -798,7 +798,7 @@ class _StepBuilder:
             "BASE_TABLE", base_info["alias"] or base_info["table"] or "base",
             f"Load base relation '{base_label}'",
             self._sql(from_node), scope, prefix, from_sql, measure_expr, alias_map,
-            measure_tables=measure_tables,
+            measure_tables=measure_tables,measures=measures,
         )
 
         # ---- joins (cumulative) --------------------------------------------- #
@@ -858,7 +858,7 @@ class _StepBuilder:
                 f"Perform {join_type} JOIN with '{info['table'] or join_alias}'",
                 self._sql(join), scope, prefix, from_sql, measure_expr, alias_map,
                 measure_tables=measure_tables,
-                join_details=details,
+                join_details=details,measures=measures,
             )
 
         # ---- where ---------------------------------------------------------- #
@@ -877,6 +877,7 @@ class _StepBuilder:
                 where_sql=self._sql(where.this),
                 measure_tables=measure_tables,
                 where_details={"condition": self._sql(where.this), "conjuncts": conjuncts},
+                measures=measures,
             )
 
         # ---- group by / aggregate -------------------------------------------- #
@@ -929,6 +930,29 @@ class _StepBuilder:
     def _flow_step(self, step_type, name, description, snippet, scope, prefix, from_sql,
                    measure_expr, alias_map, where_sql=None, measure_tables=(), **extra):
         tail = f" WHERE {where_sql}" if where_sql else ""
+        measure_queries = {}
+
+        for measure in extra.get("measures", []):
+            func = str(measure.get("func") or "").upper()
+            expression = measure.get("expression")
+
+            if func not in {"SUM", "COUNT", "AVG"} or not expression:
+                continue
+
+            current_measure_tables = measure.get("tables") or []
+            measurable = all(
+                (not table) or (table in alias_map)
+                for table in current_measure_tables
+            )
+
+            if not measurable:
+                continue
+
+            key = f"{func}:{expression}"
+            measure_queries[key] = (
+                f"{prefix}SELECT {func}({expression}) "
+                f"FROM {from_sql}{tail}"
+            )
         # The SUM() argument may reference an alias that is joined LATER: only measure the
         # running total from the step where every table it uses is already in scope.
         measurable = bool(measure_expr) and all(
@@ -947,6 +971,8 @@ class _StepBuilder:
             ),
             with_prefix=prefix,
             alias_map=dict(alias_map),
+            measures=extra.pop("measures", []),
+            measure_queries=measure_queries,
             **extra,
         )
 

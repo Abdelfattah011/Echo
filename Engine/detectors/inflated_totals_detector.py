@@ -1,6 +1,8 @@
+import logging
 from typing import Any, Dict, List, Optional
 from Engine.detectors.base_detector import BaseBugDetector
 
+logger = logging.getLogger(__name__)
 
 class InflatedTotalsDetector(BaseBugDetector):
     """Detect aggregate measures that may be duplicated by JOIN expansion."""
@@ -20,14 +22,23 @@ class InflatedTotalsDetector(BaseBugDetector):
             return None
 
     @staticmethod
-    def _get_measure_value(step):
-        """Get the aggregate value collected by the Runner."""
-        if not step:
+    def _get_measure_value(step, measure):
+        """Get the value of a specific aggregate measure collected by the Runner."""
+        if not step or not measure:
             return None
+        func = str(measure.get("func") or "").upper()
+        expression = measure.get("expression")
+        if not func or not expression:
+            return None
+        key = f"{func}:{expression}"
+        measure_values = step.get("measure_values") or {}
+        value = measure_values.get(key)
 
-        value = step.get("measure_value")
-        if value is None:
-            value = step.get("sum_value")
+        # Backward compatibility for the legacy SUM measure.
+        if value is None and func == "SUM":
+            value = step.get("measure_value")
+            if value is None:
+                value = step.get("sum_value")
         if value is None:
             return None
         try:
@@ -44,7 +55,7 @@ class InflatedTotalsDetector(BaseBugDetector):
         **kwargs,
     ) -> Optional[Dict[str, Any]]:
         
-        print("### INFLATED TOTALS DETECTOR RUNNING ###", flush=True)
+        logger.debug("Inflated Totals Detector started.")
         flow = self.collect_row_flow(parsed_steps, step_trace)
 
         if not flow:
@@ -91,46 +102,42 @@ class InflatedTotalsDetector(BaseBugDetector):
             if previous_item is None:
                 continue
 
-            before_value = self._get_measure_value(previous_item["step"])
-            after_value = self._get_measure_value(step)
+            for measure in measures:
+                func = str(measure.get("func") or "").upper()
+                # AVG and COUNT(DISTINCT) are not reliable indicators of fan-out inflation.
+                if func not in {"SUM", "COUNT"}:
+                    continue
 
-            if before_value is None or after_value is None:
-                continue
+                expression = str(measure.get("expression") or "").upper()
 
-            # Current Parser generates a measure_query for the primary SUM.
-            measure = next(
-                (
-                m for m in measures
-                if str(m.get("func") or "").upper() == "SUM"
-                ),
-                None,
-            )
+                if "DISTINCT" in expression:
+                    continue
 
-            if measure is None:
-                continue
+                measure_tables = set(measure.get("tables") or [])
 
-            measure_tables = set(measure.get("tables") or [])
+                if not measure_tables.intersection(left_aliases):
+                    continue
 
-            if not measure_tables.intersection(left_aliases):
-                continue
+                before_value = self._get_measure_value(previous_item["step"], measure)
+                after_value = self._get_measure_value(step, measure)
 
-            if before_value == 0:
-                continue
+                if before_value is None or after_value is None or before_value == 0:
+                    continue
 
-            ratio = abs(after_value) / abs(before_value)
+                ratio = abs(after_value) / abs(before_value)
 
-            if ratio < self.MIN_INFLATION_RATIO:
-                continue
+                if ratio < self.MIN_INFLATION_RATIO:
+                    continue
 
-            findings.append({
-                "item": item,
-                "measure": measure,
-                "ratio": ratio,
-                "before_value": before_value,
-                "after_value": after_value,
-                "before_rows": before_rows,
-                "after_rows": after_rows,
-            })
+                findings.append({
+                    "item": item,
+                    "measure": measure,
+                    "ratio": ratio,
+                    "before_value": before_value,
+                    "after_value": after_value,
+                    "before_rows": before_rows,
+                    "after_rows": after_rows,
+                })
         if not findings:
             return None
         # Select the finding with the largest observed expansion.

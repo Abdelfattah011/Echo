@@ -26,3 +26,6 @@ Thumbs.db
 
 # Benchmark results
 benchmark/results/
+
+# Generated benchmark databases
+*.duckdb

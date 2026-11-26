@@ -11,8 +11,8 @@
             "right_step_coverage": 100.0,
             "false_positives": 0,
             "false_positive_rate": 0.0,
-            "average_execution_time_ms": 51.19,
-            "average_wall_clock_time_ms": 100.89,
+            "average_execution_time_ms": 43.19,
+            "average_wall_clock_time_ms": 106.94,
             "detector_errors": 0,
             "per_type": {
                 "JOIN Fan-out": {

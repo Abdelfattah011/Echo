@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    description: Raw ECHO tables (migrations 001, 002, 003).
+    tables:
+      - name: runs
+      - name: steps
+      - name: cases
+      - name: benchmark_runs
+      - name: benchmark_results

@@ -1,0 +1,213 @@
+version: 2
+
+# Written for dbt 1.10+ syntax (data_tests / arguments).
+
+models:
+  # ------------------------------------------------------------------ runs
+  - name: silver_runs
+    description: One row per analysis run of one SQL query.
+    columns:
+      - name: run_id
+        data_tests: [not_null, unique]
+      - name: query_text
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [PENDING, RUNNING, DONE, FAILED]
+      - name: verdict
+        data_tests:
+          - accepted_values:          # NULL is allowed (run not finished yet)
+              arguments:
+                values: [issues_found, no_issues_found, error]
+
+  # ----------------------------------------------------------------- steps
+  - name: silver_steps
+    description: One row per parsed step, with the row count of the previous step in the same scope.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [run_id, step_number]
+    columns:
+      - name: step_id
+        data_tests: [not_null, unique]
+      - name: run_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_runs')
+                field: run_id
+      - name: step_number
+        data_tests: [not_null]
+      - name: step_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              # Everything the parser / runner can emit (migration 002 removed the old 6-value check),
+              # plus FROM and SELECT, which migration 001 allowed.
+              arguments:
+                values:
+                  - BASE_TABLE
+                  - JOIN
+                  - WHERE
+                  - GROUP_BY
+                  - AGGREGATE
+                  - PROJECTION
+                  - CTE
+                  - UNION_PART
+                  - SET_OPERATION
+                  - QUERY
+                  - DML
+                  - DDL
+                  - ADMIN
+                  - SYNTAX_ERROR
+                  - SECURITY_ERROR
+                  - ENGINE_ERROR
+                  - FROM
+                  - SELECT
+      - name: status
+        data_tests:
+          - accepted_values:          # NULL is allowed (older rows)
+              arguments:
+                values: [success, failed, skipped]
+      - name: row_count
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+
+  # ----------------------------------------------------------------- cases
+  - name: silver_cases
+    description: One row per bug that ECHO found in a run.
+    columns:
+      - name: case_id
+        data_tests: [not_null, unique]
+      - name: run_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_runs')
+                field: run_id
+      - name: step_id
+        data_tests:
+          - relationships:            # NULL is allowed (the step is optional)
+              arguments:
+                to: ref('silver_steps')
+                field: step_id
+      - name: detector_name
+        data_tests: [not_null]
+      - name: bug_type
+        data_tests: [not_null]
+      - name: bug_category
+        data_tests:
+          - accepted_values:          # NULL = not one of the 5 taxonomy bugs
+              arguments:
+                values:
+                  - JOIN Fan-out
+                  - Inflated Totals
+                  - Lost Rows in a LEFT JOIN
+                  - NULL Join Keys
+                  - Key Type Mismatch
+              config:
+                severity: warn        # warn until we have seen what the loader really writes
+      - name: severity
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [LOW, MEDIUM, HIGH, CRITICAL]
+      - name: confidence
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [high, medium, low]
+
+  # -------------------------------------------------------- benchmark runs
+  - name: silver_benchmark_runs
+    description: One row per execution of the benchmark.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "broken_cases + clean_cases = total_cases"
+            where: "total_cases is not null and broken_cases is not null and clean_cases is not null"
+    columns:
+      - name: benchmark_run_id
+        data_tests: [not_null, unique]
+      - name: mode
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [full, quick]
+      - name: executed_at
+        data_tests: [not_null]
+      - name: detection_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: false_positive_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+
+  # ----------------------------------------------------- benchmark results
+  - name: silver_benchmark_results
+    description: One row per benchmark test query per benchmark run (known answer vs what ECHO did).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [benchmark_run_id, case_id]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "is_clean = (bug_type = 'Clean')"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not (false_positive and not is_clean)"      # false alarms exist only on clean queries
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not (right_step and not detected)"          # right step needs a detection
+    columns:
+      - name: result_id
+        data_tests: [not_null, unique]
+      - name: benchmark_run_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_benchmark_runs')
+                field: benchmark_run_id
+      - name: case_id
+        data_tests: [not_null]
+      - name: bug_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - JOIN Fan-out
+                  - Inflated Totals
+                  - Lost Rows in a LEFT JOIN
+                  - NULL Join Keys
+                  - Key Type Mismatch
+                  - Clean
+      - name: is_clean
+        data_tests: [not_null]
+      - name: outcome
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [ERROR, FALSE_ALARM, CLEAN_OK, DETECTED_RIGHT_STEP, DETECTED_WRONG_STEP, MISSED]
+      - name: execution_time_ms
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0

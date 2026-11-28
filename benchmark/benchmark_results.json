@@ -11,8 +11,8 @@
         "right_step_coverage": 100.0,
         "false_positives": 0,
         "false_positive_rate": 0.0,
-        "average_execution_time_ms": 43.19,
-        "average_wall_clock_time_ms": 106.94,
+        "average_execution_time_ms": 20.55,
+        "average_wall_clock_time_ms": 44.81,
         "detector_errors": 0,
         "per_type": {
             "JOIN Fan-out": {
@@ -72,15 +72,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 67.5,
-            "wall_clock_ms": 246.39,
+            "execution_time_ms": 73.85,
+            "wall_clock_ms": 210.4,
             "detector_times_ms": {
-                "FanOutDetector": 11.56,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 5.43,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 2.98
+                "FanOutDetector": 7.59,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.71,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.06
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -100,15 +100,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 62.59,
-            "wall_clock_ms": 124.15,
+            "execution_time_ms": 22.85,
+            "wall_clock_ms": 45.76,
             "detector_times_ms": {
-                "FanOutDetector": 11.16,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 4.3,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 6.65
+                "FanOutDetector": 4.32,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.27,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.1
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -128,15 +128,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 69.15,
-            "wall_clock_ms": 137.47,
+            "execution_time_ms": 15.29,
+            "wall_clock_ms": 38.36,
             "detector_times_ms": {
-                "FanOutDetector": 10.25,
-                "GeneralAnomalyDetector": 0.06,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 4.5,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.88
+                "FanOutDetector": 3.24,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.91,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.81
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -156,15 +156,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 64.45,
-            "wall_clock_ms": 134.68,
+            "execution_time_ms": 15.74,
+            "wall_clock_ms": 36.72,
             "detector_times_ms": {
-                "FanOutDetector": 11.33,
-                "GeneralAnomalyDetector": 0.17,
-                "InflatedTotalsDetector": 0.07,
-                "KeyTypeMismatchDetector": 5.45,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.04
+                "FanOutDetector": 3.42,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.88,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 0.82
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -184,15 +184,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 34.42,
-            "wall_clock_ms": 96.23,
+            "execution_time_ms": 17.9,
+            "wall_clock_ms": 37.19,
             "detector_times_ms": {
-                "FanOutDetector": 7.97,
-                "GeneralAnomalyDetector": 0.15,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 4.16,
+                "FanOutDetector": 6.34,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.2,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 3.77
+                "NullJoinKeysDetector": 1.02
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -212,15 +212,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 45.48,
-            "wall_clock_ms": 113.24,
+            "execution_time_ms": 16.94,
+            "wall_clock_ms": 38.84,
             "detector_times_ms": {
-                "FanOutDetector": 9.11,
-                "GeneralAnomalyDetector": 0.07,
+                "FanOutDetector": 3.15,
+                "GeneralAnomalyDetector": 0.05,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 2.71,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 3.35
+                "KeyTypeMismatchDetector": 0.87,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 0.9
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -240,15 +240,15 @@
             "suspicious_steps": [
                 "step_3"
             ],
-            "execution_time_ms": 59.71,
-            "wall_clock_ms": 135.57,
+            "execution_time_ms": 28.44,
+            "wall_clock_ms": 48.83,
             "detector_times_ms": {
-                "FanOutDetector": 9.79,
-                "GeneralAnomalyDetector": 0.14,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 6.42,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 7.24
+                "FanOutDetector": 4.48,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 2.42,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.85
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -268,15 +268,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 61.64,
-            "wall_clock_ms": 157.59,
+            "execution_time_ms": 18.73,
+            "wall_clock_ms": 43.56,
             "detector_times_ms": {
-                "FanOutDetector": 10.48,
-                "GeneralAnomalyDetector": 0.13,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 2.73,
+                "FanOutDetector": 3.61,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.0,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 3.25
+                "NullJoinKeysDetector": 0.89
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -296,15 +296,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 63.3,
-            "wall_clock_ms": 148.4,
+            "execution_time_ms": 16.04,
+            "wall_clock_ms": 37.16,
             "detector_times_ms": {
-                "FanOutDetector": 10.75,
-                "GeneralAnomalyDetector": 0.19,
-                "InflatedTotalsDetector": 0.1,
-                "KeyTypeMismatchDetector": 5.4,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.73
+                "FanOutDetector": 3.5,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.96,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 0.99
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -324,15 +324,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 63.48,
-            "wall_clock_ms": 133.46,
+            "execution_time_ms": 14.26,
+            "wall_clock_ms": 37.31,
             "detector_times_ms": {
-                "FanOutDetector": 13.26,
-                "GeneralAnomalyDetector": 0.18,
-                "InflatedTotalsDetector": 0.08,
-                "KeyTypeMismatchDetector": 5.59,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.2
+                "FanOutDetector": 3.22,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.09,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.01
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -352,15 +352,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 55.08,
-            "wall_clock_ms": 123.45,
+            "execution_time_ms": 26.32,
+            "wall_clock_ms": 52.62,
             "detector_times_ms": {
-                "FanOutDetector": 10.81,
-                "GeneralAnomalyDetector": 0.11,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 4.61,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 3.55
+                "FanOutDetector": 4.4,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.59,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.17
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -380,15 +380,15 @@
             "suspicious_steps": [
                 "step_3"
             ],
-            "execution_time_ms": 64.19,
-            "wall_clock_ms": 132.77,
+            "execution_time_ms": 27.69,
+            "wall_clock_ms": 50.92,
             "detector_times_ms": {
-                "FanOutDetector": 9.14,
-                "GeneralAnomalyDetector": 0.12,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 6.2,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 4.17
+                "FanOutDetector": 3.99,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.84,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.84
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -410,15 +410,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 63.59,
-            "wall_clock_ms": 100.01,
+            "execution_time_ms": 51.56,
+            "wall_clock_ms": 74.71,
             "detector_times_ms": {
-                "FanOutDetector": 8.64,
-                "GeneralAnomalyDetector": 0.16,
-                "InflatedTotalsDetector": 0.18,
-                "KeyTypeMismatchDetector": 3.25,
+                "FanOutDetector": 4.26,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.08,
+                "KeyTypeMismatchDetector": 2.05,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.57
+                "NullJoinKeysDetector": 1.18
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -440,15 +440,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 79.71,
-            "wall_clock_ms": 144.13,
+            "execution_time_ms": 31.52,
+            "wall_clock_ms": 56.05,
             "detector_times_ms": {
-                "FanOutDetector": 6.72,
-                "GeneralAnomalyDetector": 0.07,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 4.07,
+                "FanOutDetector": 3.52,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 1.38,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.35
+                "NullJoinKeysDetector": 1.3
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -470,15 +470,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 77.7,
-            "wall_clock_ms": 123.37,
+            "execution_time_ms": 48.86,
+            "wall_clock_ms": 72.76,
             "detector_times_ms": {
-                "FanOutDetector": 7.39,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.07,
-                "KeyTypeMismatchDetector": 4.97,
+                "FanOutDetector": 5.43,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 1.97,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.5
+                "NullJoinKeysDetector": 1.48
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -500,15 +500,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 117.25,
-            "wall_clock_ms": 181.3,
+            "execution_time_ms": 35.25,
+            "wall_clock_ms": 65.51,
             "detector_times_ms": {
-                "FanOutDetector": 10.47,
-                "GeneralAnomalyDetector": 0.18,
-                "InflatedTotalsDetector": 0.16,
-                "KeyTypeMismatchDetector": 5.99,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 5.5
+                "FanOutDetector": 4.48,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 1.64,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.52
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -530,15 +530,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 63.31,
-            "wall_clock_ms": 422.94,
+            "execution_time_ms": 22.06,
+            "wall_clock_ms": 49.36,
             "detector_times_ms": {
-                "FanOutDetector": 15.24,
-                "GeneralAnomalyDetector": 0.15,
-                "InflatedTotalsDetector": 0.16,
-                "KeyTypeMismatchDetector": 4.23,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.11
+                "FanOutDetector": 3.09,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.08,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 0.94
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -560,15 +560,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 66.13,
-            "wall_clock_ms": 139.92,
+            "execution_time_ms": 34.09,
+            "wall_clock_ms": 75.33,
             "detector_times_ms": {
-                "FanOutDetector": 10.07,
-                "GeneralAnomalyDetector": 0.21,
-                "InflatedTotalsDetector": 0.19,
-                "KeyTypeMismatchDetector": 6.48,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 7.07
+                "FanOutDetector": 4.66,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 1.7,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.78
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -590,15 +590,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 60.23,
-            "wall_clock_ms": 141.42,
+            "execution_time_ms": 41.09,
+            "wall_clock_ms": 76.91,
             "detector_times_ms": {
-                "FanOutDetector": 8.16,
-                "GeneralAnomalyDetector": 0.06,
-                "InflatedTotalsDetector": 0.13,
-                "KeyTypeMismatchDetector": 2.71,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 3.06
+                "FanOutDetector": 8.3,
+                "GeneralAnomalyDetector": 0.08,
+                "InflatedTotalsDetector": 0.07,
+                "KeyTypeMismatchDetector": 2.38,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 2.13
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -620,15 +620,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 54.75,
-            "wall_clock_ms": 125.17,
+            "execution_time_ms": 36.3,
+            "wall_clock_ms": 63.03,
             "detector_times_ms": {
-                "FanOutDetector": 8.91,
-                "GeneralAnomalyDetector": 0.06,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 1.52,
+                "FanOutDetector": 2.9,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 0.92,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 1.74
+                "NullJoinKeysDetector": 0.87
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -650,15 +650,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 59.39,
-            "wall_clock_ms": 123.52,
+            "execution_time_ms": 30.05,
+            "wall_clock_ms": 51.4,
             "detector_times_ms": {
-                "FanOutDetector": 11.61,
-                "GeneralAnomalyDetector": 0.13,
-                "InflatedTotalsDetector": 0.11,
-                "KeyTypeMismatchDetector": 2.94,
-                "LostRowsDetector": 0.07,
-                "NullJoinKeysDetector": 4.09
+                "FanOutDetector": 3.88,
+                "GeneralAnomalyDetector": 0.1,
+                "InflatedTotalsDetector": 0.08,
+                "KeyTypeMismatchDetector": 1.68,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.02
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -680,15 +680,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 97.47,
-            "wall_clock_ms": 180.58,
+            "execution_time_ms": 51.79,
+            "wall_clock_ms": 85.43,
             "detector_times_ms": {
-                "FanOutDetector": 10.53,
-                "GeneralAnomalyDetector": 0.27,
-                "InflatedTotalsDetector": 0.24,
-                "KeyTypeMismatchDetector": 4.06,
+                "FanOutDetector": 6.49,
+                "GeneralAnomalyDetector": 0.12,
+                "InflatedTotalsDetector": 0.09,
+                "KeyTypeMismatchDetector": 3.16,
                 "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 3.68
+                "NullJoinKeysDetector": 2.81
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -710,15 +710,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 59.64,
-            "wall_clock_ms": 124.41,
+            "execution_time_ms": 38.47,
+            "wall_clock_ms": 69.69,
             "detector_times_ms": {
-                "FanOutDetector": 6.33,
-                "GeneralAnomalyDetector": 0.07,
+                "FanOutDetector": 3.69,
+                "GeneralAnomalyDetector": 0.08,
                 "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 2.45,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 3.09
+                "KeyTypeMismatchDetector": 1.29,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 2.1
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -740,15 +740,15 @@
                 "step_3",
                 "step_3"
             ],
-            "execution_time_ms": 107.41,
-            "wall_clock_ms": 175.44,
+            "execution_time_ms": 45.81,
+            "wall_clock_ms": 70.76,
             "detector_times_ms": {
-                "FanOutDetector": 11.12,
-                "GeneralAnomalyDetector": 0.12,
-                "InflatedTotalsDetector": 0.12,
-                "KeyTypeMismatchDetector": 5.65,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.25
+                "FanOutDetector": 3.63,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 2.22,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 2.0
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -770,15 +770,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 32.58,
-            "wall_clock_ms": 74.98,
+            "execution_time_ms": 25.51,
+            "wall_clock_ms": 47.11,
             "detector_times_ms": {
-                "FanOutDetector": 6.33,
-                "GeneralAnomalyDetector": 0.1,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 2.59,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 2.32
+                "FanOutDetector": 8.73,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.11,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.09
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -800,15 +800,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 24.95,
-            "wall_clock_ms": 61.98,
+            "execution_time_ms": 17.94,
+            "wall_clock_ms": 42.48,
             "detector_times_ms": {
-                "FanOutDetector": 4.79,
-                "GeneralAnomalyDetector": 0.09,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 1.94,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 1.57
+                "FanOutDetector": 3.61,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.98,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 0.95
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -830,15 +830,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 27.83,
-            "wall_clock_ms": 71.64,
+            "execution_time_ms": 11.97,
+            "wall_clock_ms": 32.05,
             "detector_times_ms": {
-                "FanOutDetector": 6.68,
-                "GeneralAnomalyDetector": 0.12,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 2.44,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 2.43
+                "FanOutDetector": 2.39,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.83,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 0.81
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -860,15 +860,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 22.26,
-            "wall_clock_ms": 66.61,
+            "execution_time_ms": 26.81,
+            "wall_clock_ms": 44.23,
             "detector_times_ms": {
-                "FanOutDetector": 5.08,
-                "GeneralAnomalyDetector": 0.06,
+                "FanOutDetector": 7.7,
+                "GeneralAnomalyDetector": 0.08,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 2.09,
+                "KeyTypeMismatchDetector": 1.77,
                 "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 1.44
+                "NullJoinKeysDetector": 1.24
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -890,15 +890,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 22.48,
-            "wall_clock_ms": 57.13,
+            "execution_time_ms": 18.54,
+            "wall_clock_ms": 41.09,
             "detector_times_ms": {
-                "FanOutDetector": 5.26,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 2.45,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 2.21
+                "FanOutDetector": 2.82,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.25,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.55
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -918,15 +918,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 35.06,
-            "wall_clock_ms": 76.79,
+            "execution_time_ms": 24.97,
+            "wall_clock_ms": 51.11,
             "detector_times_ms": {
-                "FanOutDetector": 7.96,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 1.86,
+                "FanOutDetector": 4.87,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.33,
                 "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 2.28
+                "NullJoinKeysDetector": 1.53
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -948,15 +948,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 23.28,
-            "wall_clock_ms": 71.14,
+            "execution_time_ms": 17.04,
+            "wall_clock_ms": 42.67,
             "detector_times_ms": {
-                "FanOutDetector": 4.95,
-                "GeneralAnomalyDetector": 0.1,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 2.05,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 1.87
+                "FanOutDetector": 2.76,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 2.34,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.9
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -978,15 +978,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 20.68,
-            "wall_clock_ms": 55.72,
+            "execution_time_ms": 21.2,
+            "wall_clock_ms": 46.75,
             "detector_times_ms": {
-                "FanOutDetector": 4.4,
-                "GeneralAnomalyDetector": 0.11,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 2.03,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 1.89
+                "FanOutDetector": 4.26,
+                "GeneralAnomalyDetector": 0.07,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.23,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.06
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1008,15 +1008,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 38.44,
-            "wall_clock_ms": 77.78,
+            "execution_time_ms": 21.39,
+            "wall_clock_ms": 39.03,
             "detector_times_ms": {
-                "FanOutDetector": 9.17,
-                "GeneralAnomalyDetector": 0.17,
-                "InflatedTotalsDetector": 0.1,
-                "KeyTypeMismatchDetector": 4.4,
-                "LostRowsDetector": 0.05,
-                "NullJoinKeysDetector": 4.15
+                "FanOutDetector": 5.18,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.07,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.14
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1038,15 +1038,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 38.84,
-            "wall_clock_ms": 99.73,
+            "execution_time_ms": 17.02,
+            "wall_clock_ms": 39.41,
             "detector_times_ms": {
-                "FanOutDetector": 5.87,
-                "GeneralAnomalyDetector": 0.11,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 3.21,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 2.72
+                "FanOutDetector": 2.61,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.03,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.41
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1068,15 +1068,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 42.62,
-            "wall_clock_ms": 110.28,
+            "execution_time_ms": 14.78,
+            "wall_clock_ms": 36.6,
             "detector_times_ms": {
-                "FanOutDetector": 8.19,
-                "GeneralAnomalyDetector": 0.18,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 4.51,
-                "LostRowsDetector": 0.04,
-                "NullJoinKeysDetector": 4.18
+                "FanOutDetector": 3.24,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.15,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.05
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1098,15 +1098,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 76.39,
-            "wall_clock_ms": 147.54,
+            "execution_time_ms": 25.74,
+            "wall_clock_ms": 51.69,
             "detector_times_ms": {
-                "FanOutDetector": 12.84,
-                "GeneralAnomalyDetector": 0.12,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 3.11,
-                "LostRowsDetector": 0.04,
-                "NullJoinKeysDetector": 4.43
+                "FanOutDetector": 5.25,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.22,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.33
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1126,15 +1126,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 43.24,
-            "wall_clock_ms": 99.71,
+            "execution_time_ms": 14.04,
+            "wall_clock_ms": 34.5,
             "detector_times_ms": {
-                "FanOutDetector": 0.18,
-                "GeneralAnomalyDetector": 0.18,
-                "InflatedTotalsDetector": 0.07,
-                "KeyTypeMismatchDetector": 5.79,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 6.18
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.01,
+                "KeyTypeMismatchDetector": 0.99,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.15
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1154,15 +1154,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 47.55,
-            "wall_clock_ms": 131.38,
+            "execution_time_ms": 12.51,
+            "wall_clock_ms": 32.62,
             "detector_times_ms": {
-                "FanOutDetector": 0.13,
-                "GeneralAnomalyDetector": 0.15,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 6.48,
-                "LostRowsDetector": 0.07,
-                "NullJoinKeysDetector": 5.69
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.12,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.12
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1182,15 +1182,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 39.48,
-            "wall_clock_ms": 100.22,
+            "execution_time_ms": 10.01,
+            "wall_clock_ms": 27.87,
             "detector_times_ms": {
-                "FanOutDetector": 0.07,
-                "GeneralAnomalyDetector": 0.06,
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 6.87,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.34
+                "KeyTypeMismatchDetector": 1.02,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.09
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1210,15 +1210,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 37.31,
-            "wall_clock_ms": 108.75,
+            "execution_time_ms": 10.96,
+            "wall_clock_ms": 33.81,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.07,
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 5.36,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.16
+                "KeyTypeMismatchDetector": 1.06,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.29
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1238,15 +1238,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 34.34,
-            "wall_clock_ms": 88.92,
+            "execution_time_ms": 26.33,
+            "wall_clock_ms": 45.51,
             "detector_times_ms": {
-                "FanOutDetector": 0.13,
-                "GeneralAnomalyDetector": 4.96,
-                "InflatedTotalsDetector": 0.08,
-                "KeyTypeMismatchDetector": 3.32,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.69
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 6.01,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 2.65,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 2.87
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1266,15 +1266,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 33.35,
-            "wall_clock_ms": 84.32,
+            "execution_time_ms": 17.26,
+            "wall_clock_ms": 53.34,
             "detector_times_ms": {
-                "FanOutDetector": 0.11,
-                "GeneralAnomalyDetector": 5.16,
-                "InflatedTotalsDetector": 0.05,
-                "KeyTypeMismatchDetector": 3.11,
+                "FanOutDetector": 0.14,
+                "GeneralAnomalyDetector": 2.35,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 1.18,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 4.48
+                "NullJoinKeysDetector": 1.49
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1294,15 +1294,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 45.13,
-            "wall_clock_ms": 115.2,
+            "execution_time_ms": 20.85,
+            "wall_clock_ms": 47.51,
             "detector_times_ms": {
-                "FanOutDetector": 0.24,
-                "GeneralAnomalyDetector": 0.22,
-                "InflatedTotalsDetector": 0.09,
-                "KeyTypeMismatchDetector": 4.81,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 5.45
+                "FanOutDetector": 0.07,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.9,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.86
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1322,15 +1322,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 29.76,
-            "wall_clock_ms": 79.18,
+            "execution_time_ms": 17.56,
+            "wall_clock_ms": 45.01,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.06,
-                "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 4.32,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 4.54
+                "FanOutDetector": 0.12,
+                "GeneralAnomalyDetector": 0.11,
+                "InflatedTotalsDetector": 0.03,
+                "KeyTypeMismatchDetector": 1.35,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.54
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1350,15 +1350,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 38.16,
-            "wall_clock_ms": 103.59,
+            "execution_time_ms": 11.01,
+            "wall_clock_ms": 34.52,
             "detector_times_ms": {
-                "FanOutDetector": 0.14,
-                "GeneralAnomalyDetector": 0.14,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 4.2,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.35
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.01,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.03
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1378,15 +1378,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 16.65,
-            "wall_clock_ms": 63.35,
+            "execution_time_ms": 11.69,
+            "wall_clock_ms": 33.3,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.06,
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.05,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 1.92,
+                "KeyTypeMismatchDetector": 1.14,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 1.95
+                "NullJoinKeysDetector": 1.04
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1408,15 +1408,15 @@
                 "step_2",
                 "step_2"
             ],
-            "execution_time_ms": 32.87,
-            "wall_clock_ms": 79.92,
+            "execution_time_ms": 11.13,
+            "wall_clock_ms": 29.9,
             "detector_times_ms": {
-                "FanOutDetector": 6.03,
-                "GeneralAnomalyDetector": 0.06,
-                "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 1.84,
+                "FanOutDetector": 1.99,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.01,
+                "KeyTypeMismatchDetector": 1.07,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 4.16
+                "NullJoinKeysDetector": 1.65
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1436,15 +1436,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 46.16,
-            "wall_clock_ms": 119.95,
+            "execution_time_ms": 15.93,
+            "wall_clock_ms": 35.31,
             "detector_times_ms": {
-                "FanOutDetector": 0.09,
-                "GeneralAnomalyDetector": 3.33,
-                "InflatedTotalsDetector": 0.09,
-                "KeyTypeMismatchDetector": 2.34,
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 1.45,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 0.94,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 4.29
+                "NullJoinKeysDetector": 0.93
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1464,15 +1464,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 22.04,
-            "wall_clock_ms": 67.18,
+            "execution_time_ms": 12.3,
+            "wall_clock_ms": 29.52,
             "detector_times_ms": {
-                "FanOutDetector": 0.12,
-                "GeneralAnomalyDetector": 0.12,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 3.85,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.72
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 2.6,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.98
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1492,15 +1492,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 29.72,
-            "wall_clock_ms": 83.5,
+            "execution_time_ms": 9.88,
+            "wall_clock_ms": 30.03,
             "detector_times_ms": {
-                "FanOutDetector": 0.07,
-                "GeneralAnomalyDetector": 0.07,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 4.12,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.25
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.87,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.99
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1520,15 +1520,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 37.66,
-            "wall_clock_ms": 91.69,
+            "execution_time_ms": 13.66,
+            "wall_clock_ms": 32.57,
             "detector_times_ms": {
-                "FanOutDetector": 0.18,
-                "GeneralAnomalyDetector": 6.51,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 2.66,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 4.94
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 1.63,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 1.09,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.87
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1548,15 +1548,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 57.11,
-            "wall_clock_ms": 121.05,
+            "execution_time_ms": 18.72,
+            "wall_clock_ms": 36.47,
             "detector_times_ms": {
-                "FanOutDetector": 0.13,
-                "GeneralAnomalyDetector": 5.13,
-                "InflatedTotalsDetector": 0.07,
-                "KeyTypeMismatchDetector": 2.11,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.45
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 1.92,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 1.11,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.96
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1576,15 +1576,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 18.18,
-            "wall_clock_ms": 55.13,
+            "execution_time_ms": 10.32,
+            "wall_clock_ms": 29.18,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.07,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 1.78,
-                "LostRowsDetector": 0.05,
-                "NullJoinKeysDetector": 2.96
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.31,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.17
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1604,15 +1604,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 24.03,
-            "wall_clock_ms": 72.38,
+            "execution_time_ms": 16.24,
+            "wall_clock_ms": 34.21,
             "detector_times_ms": {
-                "FanOutDetector": 0.15,
-                "GeneralAnomalyDetector": 0.14,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 3.45,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 1.8
+                "FanOutDetector": 0.08,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 2.11,
+                "LostRowsDetector": 0.02,
+                "NullJoinKeysDetector": 1.74
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1632,15 +1632,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 25.2,
-            "wall_clock_ms": 79.42,
+            "execution_time_ms": 12.94,
+            "wall_clock_ms": 32.42,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 3.02,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.66
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.91,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.98
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1660,15 +1660,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 25.43,
-            "wall_clock_ms": 59.5,
+            "execution_time_ms": 11.63,
+            "wall_clock_ms": 32.18,
             "detector_times_ms": {
-                "FanOutDetector": 0.07,
-                "GeneralAnomalyDetector": 2.95,
-                "InflatedTotalsDetector": 0.11,
-                "KeyTypeMismatchDetector": 3.68,
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 1.98,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 1.54,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 2.99
+                "NullJoinKeysDetector": 1.13
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1688,15 +1688,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 21.47,
-            "wall_clock_ms": 65.83,
+            "execution_time_ms": 12.37,
+            "wall_clock_ms": 33.01,
             "detector_times_ms": {
                 "FanOutDetector": 0.06,
-                "GeneralAnomalyDetector": 0.06,
+                "GeneralAnomalyDetector": 0.04,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 1.89,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 2.71
+                "KeyTypeMismatchDetector": 1.28,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.98
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1716,15 +1716,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 36.56,
-            "wall_clock_ms": 68.71,
+            "execution_time_ms": 15.98,
+            "wall_clock_ms": 35.95,
             "detector_times_ms": {
-                "FanOutDetector": 0.16,
-                "GeneralAnomalyDetector": 6.64,
-                "InflatedTotalsDetector": 0.13,
-                "KeyTypeMismatchDetector": 3.79,
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 1.37,
+                "InflatedTotalsDetector": 0.04,
+                "KeyTypeMismatchDetector": 1.09,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 3.77
+                "NullJoinKeysDetector": 0.82
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1744,15 +1744,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 34.58,
-            "wall_clock_ms": 93.12,
+            "execution_time_ms": 9.85,
+            "wall_clock_ms": 31.73,
             "detector_times_ms": {
-                "FanOutDetector": 0.07,
-                "GeneralAnomalyDetector": 0.06,
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
                 "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 1.82,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 1.77
+                "KeyTypeMismatchDetector": 0.99,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.92
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1772,15 +1772,15 @@
             "suspicious_steps": [
                 "step_2"
             ],
-            "execution_time_ms": 30.47,
-            "wall_clock_ms": 81.05,
+            "execution_time_ms": 13.89,
+            "wall_clock_ms": 34.99,
             "detector_times_ms": {
-                "FanOutDetector": 0.11,
-                "GeneralAnomalyDetector": 4.39,
-                "InflatedTotalsDetector": 0.16,
-                "KeyTypeMismatchDetector": 2.48,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 1.88
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 1.32,
+                "InflatedTotalsDetector": 0.05,
+                "KeyTypeMismatchDetector": 1.07,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.85
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1796,15 +1796,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 14.32,
-            "wall_clock_ms": 67.37,
+            "execution_time_ms": 6.91,
+            "wall_clock_ms": 23.67,
             "detector_times_ms": {
-                "FanOutDetector": 0.08,
-                "GeneralAnomalyDetector": 0.07,
-                "InflatedTotalsDetector": 0.03,
-                "KeyTypeMismatchDetector": 0.02,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 0.03
+                "FanOutDetector": 0.09,
+                "GeneralAnomalyDetector": 0.06,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 0.01,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.01
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1820,12 +1820,12 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 10.52,
-            "wall_clock_ms": 52.04,
+            "execution_time_ms": 8.24,
+            "wall_clock_ms": 26.32,
             "detector_times_ms": {
-                "FanOutDetector": 0.06,
-                "GeneralAnomalyDetector": 0.08,
-                "InflatedTotalsDetector": 0.02,
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.01,
                 "KeyTypeMismatchDetector": 0.01,
                 "LostRowsDetector": 0.0,
                 "NullJoinKeysDetector": 0.01
@@ -1844,12 +1844,12 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 7.4,
-            "wall_clock_ms": 43.91,
+            "execution_time_ms": 6.71,
+            "wall_clock_ms": 26.79,
             "detector_times_ms": {
-                "FanOutDetector": 0.11,
-                "GeneralAnomalyDetector": 0.05,
-                "InflatedTotalsDetector": 0.02,
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.03,
+                "InflatedTotalsDetector": 0.01,
                 "KeyTypeMismatchDetector": 0.01,
                 "LostRowsDetector": 0.0,
                 "NullJoinKeysDetector": 0.01
@@ -1868,15 +1868,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 15.34,
-            "wall_clock_ms": 68.25,
+            "execution_time_ms": 6.37,
+            "wall_clock_ms": 27.31,
             "detector_times_ms": {
-                "FanOutDetector": 0.1,
-                "GeneralAnomalyDetector": 0.1,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 0.02,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 0.02
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.03,
+                "InflatedTotalsDetector": 0.01,
+                "KeyTypeMismatchDetector": 0.01,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.01
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1892,12 +1892,12 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 8.8,
-            "wall_clock_ms": 84.6,
+            "execution_time_ms": 4.87,
+            "wall_clock_ms": 21.88,
             "detector_times_ms": {
-                "FanOutDetector": 0.05,
-                "GeneralAnomalyDetector": 0.04,
-                "InflatedTotalsDetector": 0.02,
+                "FanOutDetector": 0.03,
+                "GeneralAnomalyDetector": 0.03,
+                "InflatedTotalsDetector": 0.01,
                 "KeyTypeMismatchDetector": 0.01,
                 "LostRowsDetector": 0.0,
                 "NullJoinKeysDetector": 0.01
@@ -1916,15 +1916,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 18.98,
-            "wall_clock_ms": 66.34,
+            "execution_time_ms": 13.17,
+            "wall_clock_ms": 34.77,
             "detector_times_ms": {
-                "FanOutDetector": 0.07,
-                "GeneralAnomalyDetector": 0.07,
-                "InflatedTotalsDetector": 0.02,
-                "KeyTypeMismatchDetector": 2.07,
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.01,
+                "KeyTypeMismatchDetector": 1.0,
                 "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 3.06
+                "NullJoinKeysDetector": 0.93
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1940,15 +1940,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 56.55,
-            "wall_clock_ms": 114.54,
+            "execution_time_ms": 19.28,
+            "wall_clock_ms": 36.72,
             "detector_times_ms": {
-                "FanOutDetector": 17.38,
-                "GeneralAnomalyDetector": 0.16,
-                "InflatedTotalsDetector": 0.13,
-                "KeyTypeMismatchDetector": 5.2,
-                "LostRowsDetector": 0.03,
-                "NullJoinKeysDetector": 4.52
+                "FanOutDetector": 8.8,
+                "GeneralAnomalyDetector": 0.05,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.03,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.01
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1964,15 +1964,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 33.86,
-            "wall_clock_ms": 100.01,
+            "execution_time_ms": 13.55,
+            "wall_clock_ms": 35.45,
             "detector_times_ms": {
-                "FanOutDetector": 0.14,
-                "GeneralAnomalyDetector": 0.14,
-                "InflatedTotalsDetector": 0.06,
-                "KeyTypeMismatchDetector": 5.0,
-                "LostRowsDetector": 0.02,
-                "NullJoinKeysDetector": 3.15
+                "FanOutDetector": 0.05,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.02,
+                "KeyTypeMismatchDetector": 1.37,
+                "LostRowsDetector": 0.01,
+                "NullJoinKeysDetector": 1.13
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -1988,15 +1988,15 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 14.4,
-            "wall_clock_ms": 77.61,
+            "execution_time_ms": 4.81,
+            "wall_clock_ms": 22.01,
             "detector_times_ms": {
-                "FanOutDetector": 0.1,
-                "GeneralAnomalyDetector": 0.11,
-                "InflatedTotalsDetector": 0.04,
-                "KeyTypeMismatchDetector": 0.03,
-                "LostRowsDetector": 0.01,
-                "NullJoinKeysDetector": 0.03
+                "FanOutDetector": 0.04,
+                "GeneralAnomalyDetector": 0.03,
+                "InflatedTotalsDetector": 0.01,
+                "KeyTypeMismatchDetector": 0.01,
+                "LostRowsDetector": 0.0,
+                "NullJoinKeysDetector": 0.01
             },
             "detector_errors": 0,
             "detector_error_details": [],
@@ -2012,12 +2012,12 @@
             "false_positive": false,
             "detected_bug_types": [],
             "suspicious_steps": [],
-            "execution_time_ms": 13.8,
-            "wall_clock_ms": 60.99,
+            "execution_time_ms": 13.69,
+            "wall_clock_ms": 33.63,
             "detector_times_ms": {
-                "FanOutDetector": 0.1,
-                "GeneralAnomalyDetector": 0.05,
-                "InflatedTotalsDetector": 0.02,
+                "FanOutDetector": 0.06,
+                "GeneralAnomalyDetector": 0.04,
+                "InflatedTotalsDetector": 0.01,
                 "KeyTypeMismatchDetector": 0.01,
                 "LostRowsDetector": 0.0,
                 "NullJoinKeysDetector": 0.01

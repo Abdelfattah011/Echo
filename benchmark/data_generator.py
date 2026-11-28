@@ -39,6 +39,9 @@ def generate_benchmark_data(db_path: str = "echo_benchmark.duckdb") -> None:
             CROSS JOIN (SELECT * FROM range(1, 4) AS t(addr_id)) a
         """)
 
+        # Fixed seed so the random 'orders' table is identical on every run.
+        conn.execute("SELECT setseed(0.42)")
+        
         conn.execute("""
             CREATE OR REPLACE TABLE orders AS
             SELECT

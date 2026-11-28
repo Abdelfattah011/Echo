@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: gold_scoreboard
+    description: >
+      The scoreboard. One row per benchmark run per bug type, plus an 'ALL' row per run.
+      Rates are percentages (0 to 100) and are NULL when their denominator is 0.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [benchmark_run_id, bug_type]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "detected <= broken_cases"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "right_step <= detected"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "fixes_passed <= fixes_proposed"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "broken_cases + clean_cases = total_cases"
+    columns:
+      - name: benchmark_run_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_benchmark_runs')
+                field: benchmark_run_id
+      - name: mode
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [full, quick]
+      - name: bug_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - ALL
+                  - JOIN Fan-out
+                  - Inflated Totals
+                  - Lost Rows in a LEFT JOIN
+                  - NULL Join Keys
+                  - Key Type Mismatch
+      - name: total_cases
+        data_tests: [not_null]
+      - name: detection_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: right_step_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: right_step_coverage
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: false_alarm_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: fix_pass_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+
+  - name: gold_scoreboard_latest
+    description: The newest benchmark run of each mode (quick, full). This is what the dashboard reads.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [mode, bug_type]

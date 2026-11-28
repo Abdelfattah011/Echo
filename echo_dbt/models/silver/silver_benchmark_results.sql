@@ -1,4 +1,5 @@
 -- One row per benchmark test query (case) per benchmark run.
+-- The fix columns need migration 004.
 -- outcome gives every case exactly one label, so Gold can count with simple filters:
 --   ERROR                the case itself failed to run
 --   FALSE_ALARM          clean query, but ECHO reported a bug
@@ -23,6 +24,11 @@ select
     wall_clock_ms,
     detector_errors,
     error,
+    coalesce(fix_proposed, false)      as fix_proposed,   -- NULL in Bronze = not measured = no fix
+    lower(trim(fix_status))            as fix_status,
+    fix_passed,                                           -- NULL = no fix proposed
+    rows_before,
+    rows_after,
     case
         when error is not null                                              then 'ERROR'
         when is_clean and coalesce(false_positive, false)                   then 'FALSE_ALARM'

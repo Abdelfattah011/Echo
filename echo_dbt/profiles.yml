@@ -1,0 +1,13 @@
+echo_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('ECHO_DB_HOST') }}"
+      port: 5432
+      user: "{{ env_var('ECHO_DB_USER') }}"
+      password: "{{ env_var('ECHO_DB_PASSWORD') }}"
+      dbname: "{{ env_var('ECHO_DB_NAME') }}"
+      schema: analytics
+      threads: 4
+      sslmode: prefer

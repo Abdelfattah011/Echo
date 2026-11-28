@@ -1,0 +1,180 @@
+{
+  "query": "SELECT SUM(o.amount) AS total_sales FROM orders o JOIN customer_addresses a ON o.customer_id = a.customer_id;",
+  "verdict": "issues_found",
+  "first_suspicious_step": "step_2",
+  "step_trace": [
+    {
+      "step_id": "step_1",
+      "step_type": "BASE_TABLE",
+      "name": "o",
+      "scope": "main",
+      "statement_index": 1,
+      "statement_kind": "SELECT",
+      "query": "SELECT * FROM orders AS o",
+      "row_count": 3000,
+      "sum_value": 751500.0,
+      "columns_metrics": {
+        "order_id": 4501500,
+        "customer_id": 1498500,
+        "amount": 751500.0
+      },
+      "execution_time_ms": 2.69,
+      "status": "success",
+      "error": null,
+      "measure_values": {
+        "SUM:o.amount": 751500.0
+      }
+    },
+    {
+      "step_id": "step_2",
+      "step_type": "JOIN",
+      "name": "a",
+      "scope": "main",
+      "statement_index": 1,
+      "statement_kind": "SELECT",
+      "query": "SELECT * FROM orders AS o JOIN customer_addresses AS a ON o.customer_id = a.customer_id",
+      "row_count": 9000,
+      "sum_value": 2254500.0,
+      "columns_metrics": {
+        "order_id": 13504500,
+        "customer_id": 4495500,
+        "amount": 2254500.0,
+        "customer_id_2": 4495500
+      },
+      "execution_time_ms": 1.39,
+      "status": "success",
+      "error": null,
+      "measure_values": {
+        "SUM:o.amount": 2254500.0
+      }
+    },
+    {
+      "step_id": "step_3",
+      "step_type": "AGGREGATE",
+      "name": "aggregation",
+      "scope": "main",
+      "statement_index": 1,
+      "statement_kind": "SELECT",
+      "query": "SELECT SUM(o.amount) AS total_sales FROM orders AS o JOIN customer_addresses AS a ON o.customer_id = a.customer_id",
+      "row_count": 1,
+      "sum_value": 2254500.0,
+      "columns_metrics": {
+        "total_sales": 2254500.0
+      },
+      "execution_time_ms": 1.53,
+      "status": "success",
+      "error": null,
+      "measure_values": {}
+    }
+  ],
+  "detected_bugs": [
+    {
+      "bug_type": "Possible JOIN Fan-out",
+      "severity": "High",
+      "confidence": "high",
+      "suspicious_step_id": "step_2",
+      "scope": "main",
+      "description": "Potentially harmful JOIN fan-out detected at 'step_2'. Row count increased from 3000 to 9000 (x3.00). The expansion may inflate aggregate results.",
+      "evidence": {
+        "join_step": "step_2",
+        "previous_step": "step_1",
+        "rows_before": 3000,
+        "rows_after": 9000,
+        "multiplication_factor": 3.0,
+        "join_type": "INNER",
+        "on_condition": "o.customer_id = a.customer_id",
+        "confirmed": true,
+        "likely_intentional": false,
+        "cartesian_suspected": false,
+        "duplicate_key_details": [
+          {
+            "customer_id": 0,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 1,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 2,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 3,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 4,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 5,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 6,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 7,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 8,
+            "occurrence_count": 3
+          },
+          {
+            "customer_id": 9,
+            "occurrence_count": 3
+          }
+        ],
+        "right_key_stats": {
+          "key_rows": 3000,
+          "distinct_keys": 1000,
+          "duplicate_rows": 2000
+        }
+      },
+      "suggested_fix": "Review the JOIN with customer_addresses. Check whether the join key should be unique. If multiple rows per key are expected, pre-aggregate the data before joining or aggregate at the correct level to avoid inflated totals.",
+      "detector": "FanOutDetector"
+    },
+    {
+      "bug_type": "Inflated Aggregate",
+      "severity": "High",
+      "confidence": "high",
+      "suspicious_step_id": "step_2",
+      "scope": "main",
+      "description": "Actual aggregate inflation detected at 'step_2'. SUM(o.amount) increased from 751500.0 to 2254500.0 (x3.00) after the JOIN. Row count changed from 3000 to 9000.",
+      "evidence": {
+        "aggregate_function": "SUM",
+        "aggregate_expression": "o.amount",
+        "aggregate_alias": "total_sales",
+        "measure_tables": [
+          "o"
+        ],
+        "aggregate_before": 751500.0,
+        "aggregate_after": 2254500.0,
+        "aggregate_inflation_factor": 3.0,
+        "rows_before": 3000,
+        "rows_after": 9000,
+        "row_multiplication_factor": 3.0,
+        "previous_step": "step_1"
+      },
+      "suggested_fix": "Review the JOIN cardinality and aggregation grain. If this JOIN duplicates rows containing the measure, pre-aggregate the measure before joining or aggregate at the correct level.",
+      "detector": "InflatedTotalsDetector"
+    }
+  ],
+  "warnings": [],
+  "detector_errors": [],
+  "profiling": {
+    "total_ms": 40.94,
+    "steps_ms": 32.15,
+    "detectors_ms": {
+      "FanOutDetector": 3.17,
+      "GeneralAnomalyDetector": 0.05,
+      "InflatedTotalsDetector": 0.06,
+      "KeyTypeMismatchDetector": 0.87,
+      "LostRowsDetector": 0.01,
+      "NullJoinKeysDetector": 0.81
+    }
+  }
+}
